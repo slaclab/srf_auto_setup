@@ -1,9 +1,9 @@
 import dataclasses
-from typing import Dict
+from typing import Dict, List
 
-from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QLabel, QPushButton,
-                             QTabWidget, QWidget)
-from lcls_tools.superconducting.scLinac import LINAC_TUPLES
+from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
+                             QTabWidget, QVBoxLayout, QWidget)
+from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
 from pydm import Display
 from pydm.widgets import PyDMLabel
 
@@ -11,11 +11,14 @@ from pydm.widgets import PyDMLabel
 @dataclasses.dataclass
 class Cavity:
     number: int
-    aact_pv: str
+    prefix: str
     
     def __post_init__(self):
         self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
-        self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
+        self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACT")
+        self.readback_label.showUnits = True
+        
+        # Putting this here because it otherwise gets garbage collected (?!)
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
 
 
@@ -23,54 +26,102 @@ class Cavity:
 class Cryomodule:
     linac_idx: int
     name: str
-    spinbox: QDoubleSpinBox = QDoubleSpinBox()
-    readback_label: QLabel = QLabel()
     
     def __post_init__(self):
+        self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
+        self.readback_label: QLabel = QLabel()
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
         self.cavity_widgets: Dict[int, Cavity] = {}
         for cav_num in range(1, 9):
             self.cavity_widgets[cav_num] = Cavity(cav_num,
-                                                  f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:AACT")
+                                                  f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:")
+
+
+@dataclasses.dataclass
+class Linac:
+    name: str
+    idx: int
+    cryomodule_names: List[str]
+    
+    def __post_init__(self):
+        self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
+        self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
+        self.readback_label: QLabel = QLabel("READBACK")
+        self.cryomodules: List[Cryomodule] = []
+        self.cm_tab_widget: QTabWidget = QTabWidget()
+        self.cm_widgets: Dict[str, Cryomodule] = {}
+        
+        for cm_name in self.cryomodule_names:
+            self.add_cm_tab(cm_name)
+    
+    def add_cm_tab(self, cm_name: str):
+        page: QWidget = QWidget()
+        vlayout: QVBoxLayout = QVBoxLayout()
+        page.setLayout(vlayout)
+        self.cm_tab_widget.addTab(page, f"CM{cm_name}")
+        
+        widgets = Cryomodule(linac_idx=self.idx, name=cm_name)
+        self.cm_widgets[cm_name] = widgets
+        hlayout: QHBoxLayout = QHBoxLayout()
+        hlayout.addStretch()
+        hlayout.addWidget(widgets.spinbox)
+        hlayout.addWidget(QLabel("MV"))
+        hlayout.addWidget(QLabel("READBACK"))
+        hlayout.addWidget(widgets.setup_button)
+        hlayout.addStretch()
+        
+        vlayout.addLayout(hlayout)
+        
+        groupbox: QGroupBox = QGroupBox()
+        all_cav_layout: QGridLayout = QGridLayout()
+        groupbox.setLayout(all_cav_layout)
+        vlayout.addWidget(groupbox)
+        for cav_num in range(1, 9):
+            cav_groupbox: QGroupBox = QGroupBox(f"Cavity {cav_num}")
+            cav_layout: QVBoxLayout = QVBoxLayout()
+            cav_groupbox.setLayout(cav_layout)
+            cav_widgets = widgets.cavity_widgets[cav_num]
+            cav_hlayout: QHBoxLayout = QHBoxLayout()
+            cav_hlayout.addWidget(cav_widgets.spinbox)
+            cav_hlayout.addWidget(QLabel("MV"))
+            cav_hlayout.addWidget(cav_widgets.readback_label)
+            cav_layout.addLayout(cav_hlayout)
+            cav_layout.addWidget(cav_widgets.setup_button)
+            all_cav_layout.addWidget(cav_groupbox,
+                                     0 if cav_num in range(1, 5) else 1,
+                                     (cav_num - 1) % 4)
 
 
 class SetupGUI(Display):
     def ui_filename(self):
         return 'setup.ui'
     
-    def add_cm_tab(self, cm_name: str, linac_idx: int, linac_tab_widget: QTabWidget):
-        page: QWidget = QWidget()
-        layout: QGridLayout = QGridLayout()
-        page.setLayout(layout)
-        linac_tab_widget.addTab(page, f"CM{cm_name}")
-        
-        widgets = Cryomodule(linac_idx=linac_idx, name=cm_name)
-        self.cm_widgets[cm_name] = widgets
-        layout.addWidget(widgets.spinbox, 0, 0)
-        layout.addWidget(QLabel("MV"), 0, 1)
-        layout.addWidget(QLabel("READBACK"), 0, 2)
-        layout.addWidget(widgets.setup_button, 0, 3)
-        
-        groupbox: QGroupBox = QGroupBox()
-        all_cav_layout: QGridLayout = QGridLayout()
-        groupbox.setLayout(all_cav_layout)
-        layout.addWidget(groupbox, 1, 0)
-        for cav_num in range(1, 9):
-            cav_groupbox: QGroupBox = QGroupBox()
-            cav_layout: QGridLayout = QGridLayout()
-            cav_groupbox.setLayout(cav_layout)
-            cav_widgets = widgets.cavity_widgets[cav_num]
-            cav_layout.addWidget(cav_widgets.spinbox, 0, 0)
-            cav_layout.addWidget(QLabel("MV"), 0, 1)
-            cav_layout.addWidget(cav_widgets.readback_label, 0, 2)
-            cav_layout.addWidget(cav_widgets.setup_button, 1, 0)
-            all_cav_layout.addWidget(cav_groupbox,
-                                     0 if cav_num in range(1, 5) else 1,
-                                     (cav_num - 1) % 4)
+    def add_linac_tab(self, linac_idx: int):
+        pass
     
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)
-        self.cm_widgets = {}
-        l0b_tab_widget: QTabWidget = self.ui.tabWidget_l0b
-        for cm_name in LINAC_TUPLES[0][1]:
-            self.add_cm_tab(cm_name, 0, l0b_tab_widget)
+        self.linac_widgets: List[Linac] = []
+        for linac_idx in range(0, 4):
+            self.linac_widgets.append(Linac(f"L{linac_idx}B", linac_idx, LINAC_TUPLES[linac_idx][1]))
+        
+        self.linac_widgets.insert(2, Linac("L1BHL", 1, L1BHL))
+        
+        linac_tab_widget: QTabWidget = self.ui.tabWidget_linac
+        
+        for linac in self.linac_widgets:
+            page: QWidget = QWidget()
+            vlayout: QVBoxLayout = QVBoxLayout()
+            page.setLayout(vlayout)
+            linac_tab_widget.addTab(page, linac.name)
+            
+            hlayout: QHBoxLayout = QHBoxLayout()
+            hlayout.addStretch()
+            hlayout.addWidget(linac.spinbox)
+            hlayout.addWidget(QLabel("MV"))
+            hlayout.addWidget(QLabel("READBACK"))
+            hlayout.addWidget(linac.setup_button)
+            hlayout.addStretch()
+            
+            vlayout.addLayout(hlayout)
+            vlayout.addWidget(linac.cm_tab_widget)

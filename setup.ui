@@ -6,15 +6,15 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>828</width>
-    <height>357</height>
+    <width>627</width>
+    <height>401</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string>Auto Setup</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <item row="1" column="6">
+   <item row="1" column="5">
     <spacer name="horizontalSpacer_6">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -27,7 +27,7 @@
      </property>
     </spacer>
    </item>
-   <item row="0" column="6">
+   <item row="0" column="5">
     <spacer name="horizontalSpacer_2">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -40,132 +40,22 @@
      </property>
     </spacer>
    </item>
-   <item row="2" column="0" colspan="7">
-    <widget class="QTabWidget" name="tabWidget_linac">
-     <property name="currentIndex">
-      <number>0</number>
+   <item row="1" column="2">
+    <widget class="QDoubleSpinBox" name="doubleSpinBox_2"/>
+   </item>
+   <item row="1" column="4">
+    <widget class="PyDMLabel" name="PyDMLabel">
+     <property name="toolTip">
+      <string/>
      </property>
-     <widget class="QWidget" name="tab_3">
-      <attribute name="title">
-       <string>L0B</string>
-      </attribute>
-      <layout class="QGridLayout" name="gridLayout_6">
-       <item row="1" column="3">
-        <widget class="QLabel" name="label_6">
-         <property name="text">
-          <string>MV</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QLabel" name="label_3">
-         <property name="text">
-          <string>L0B Amplitude:</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="5">
-        <spacer name="horizontalSpacer_4">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="0" column="0">
-        <spacer name="horizontalSpacer_3">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="1" column="2">
-        <widget class="QDoubleSpinBox" name="doubleSpinBox"/>
-       </item>
-       <item row="0" column="1" colspan="4">
-        <widget class="QPushButton" name="l0bSetupButton">
-         <property name="text">
-          <string>Set Up L0B</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="4">
-        <widget class="PyDMLabel" name="PyDMLabel_2">
-         <property name="toolTip">
-          <string/>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="5">
-        <spacer name="horizontalSpacer_8">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="1" column="0">
-        <spacer name="horizontalSpacer_7">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="2" column="0" colspan="6">
-        <widget class="QTabWidget" name="tabWidget_l0b">
-         <property name="currentIndex">
-          <number>-1</number>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="tab">
-      <attribute name="title">
-       <string>L1B</string>
-      </attribute>
-     </widget>
-     <widget class="QWidget" name="tab_4">
-      <attribute name="title">
-       <string>L1BHL</string>
-      </attribute>
-     </widget>
-     <widget class="QWidget" name="tab_2">
-      <attribute name="title">
-       <string>L2B</string>
-      </attribute>
-     </widget>
-     <widget class="QWidget" name="tab_5">
-      <attribute name="title">
-       <string>L3B</string>
-      </attribute>
-     </widget>
     </widget>
    </item>
-   <item row="1" column="3">
-    <widget class="QDoubleSpinBox" name="doubleSpinBox_2"/>
+   <item row="0" column="1" colspan="4">
+    <widget class="QPushButton" name="machineSetupButton">
+     <property name="text">
+      <string>Set Up Full Machine</string>
+     </property>
+    </widget>
    </item>
    <item row="1" column="0">
     <spacer name="horizontalSpacer_5">
@@ -180,7 +70,7 @@
      </property>
     </spacer>
    </item>
-   <item row="1" column="4">
+   <item row="1" column="3">
     <widget class="QLabel" name="label_5">
      <property name="text">
       <string>MV</string>
@@ -207,19 +97,8 @@
      </property>
     </spacer>
    </item>
-   <item row="1" column="5">
-    <widget class="PyDMLabel" name="PyDMLabel">
-     <property name="toolTip">
-      <string/>
-     </property>
-    </widget>
-   </item>
-   <item row="0" column="1" colspan="5">
-    <widget class="QPushButton" name="machineSetupButton">
-     <property name="text">
-      <string>Set Up Full Machine</string>
-     </property>
-    </widget>
+   <item row="2" column="0" colspan="6">
+    <widget class="QTabWidget" name="tabWidget_linac"/>
    </item>
   </layout>
  </widget>

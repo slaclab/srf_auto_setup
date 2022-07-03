@@ -1,30 +1,63 @@
 import dataclasses
 from typing import Dict, List
 
+from PyQt5.QtCore import QThread
 from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
+from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
+from lcls_tools.superconducting.scLinacUtils import SSACalibrationError, StepperError
 from pydm import Display
 from pydm.widgets import PyDMLabel
+from qtpy.QtCore import Signal
+
+from setup import DetuneError, SETUP_CRYOMODULES, SSACalError, SetupCavity
+
+
+class Worker(QThread):
+    finished = Signal(str)
+    progress = Signal(int)
+    error = Signal(str)
+    status = Signal(str)
+    
+    def __init__(self, cavity: SetupCavity, desAmp: float = 5):
+        super().__init__()
+        self.cavity: SetupCavity = cavity
+        self.desAmp = desAmp
+    
+    def run(self):
+        try:
+            self.cavity.setup(self.desAmp)
+        except (StepperError, DetuneError, SSACalError,
+                SSACalibrationError, PVInvalidError) as e:
+            self.error.emit(str(e))
 
 
 @dataclasses.dataclass
-class Cavity:
+class GUICavity:
     number: int
     prefix: str
+    cm: str
     
     def __post_init__(self):
         self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
+        self.worker = None
+        self.setup_button.clicked.connect(self.launch_worker)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACT")
         self.readback_label.showUnits = True
         
         # Putting this here because it otherwise gets garbage collected (?!)
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.spinbox.setValue(5)
+    
+    def launch_worker(self):
+        self.worker = Worker(SETUP_CRYOMODULES[self.cm].cavities[self.number], self.spinbox.value())
+        self.worker.error.connect(print)
+        self.worker.start()
 
 
 @dataclasses.dataclass
-class Cryomodule:
+class GUICryomodule:
     linac_idx: int
     name: str
     
@@ -33,10 +66,15 @@ class Cryomodule:
         self.spinbox.setValue(40)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
-        self.cavity_widgets: Dict[int, Cavity] = {}
+        self.cavity_widgets: Dict[int, GUICavity] = {}
         for cav_num in range(1, 9):
-            self.cavity_widgets[cav_num] = Cavity(cav_num,
-                                                  f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:")
+            self.cavity_widgets[cav_num] = GUICavity(cav_num,
+                                                     f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
+                                                     self.name)
+    
+    def launch_cavity_workers(self):
+        for cavity_widget in self.cavity_widgets.values():
+            cavity_widget.launch_worker()
 
 
 @dataclasses.dataclass
@@ -51,9 +89,9 @@ class Linac:
         self.spinbox.setRange(0, 16.6 * 8 * len(self.cryomodule_names))
         self.spinbox.setValue(40 * len(self.cryomodule_names))
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.idx}B:1:AACTMEANSUM")
-        self.cryomodules: List[Cryomodule] = []
+        self.cryomodules: List[GUICryomodule] = []
         self.cm_tab_widget: QTabWidget = QTabWidget()
-        self.cm_widgets: Dict[str, Cryomodule] = {}
+        self.cm_widgets: Dict[str, GUICryomodule] = {}
         
         for cm_name in self.cryomodule_names:
             self.add_cm_tab(cm_name)
@@ -64,7 +102,7 @@ class Linac:
         page.setLayout(vlayout)
         self.cm_tab_widget.addTab(page, f"CM{cm_name}")
         
-        widgets = Cryomodule(linac_idx=self.idx, name=cm_name)
+        widgets = GUICryomodule(linac_idx=self.idx, name=cm_name)
         self.cm_widgets[cm_name] = widgets
         hlayout: QHBoxLayout = QHBoxLayout()
         hlayout.addStretch()

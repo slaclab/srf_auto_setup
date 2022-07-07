@@ -4,7 +4,7 @@ from typing import Dict, List
 from PyQt5.QtCore import QThread
 from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
-from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
+from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
 from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
 from lcls_tools.superconducting.scLinacUtils import SSACalibrationError, StepperError
 from pydm import Display
@@ -42,6 +42,7 @@ class GUICavity:
     cm: str
     
     def __post_init__(self):
+        self.amax_pv: PV = PV(self.prefix + "ADES_MAX")
         self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
         self.worker = None
         self.setup_button.clicked.connect(self.launch_worker)
@@ -70,19 +71,41 @@ class GUICryomodule:
     
     def __post_init__(self):
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
+        self.spinbox.editingFinished.connect(self.set_cavity_amps)
         self.spinbox.setValue(40)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
         self.setup_button.clicked.connect(self.launch_cavity_workers)
-        self.cavity_widgets: Dict[int, GUICavity] = {}
+        self.gui_cavities: Dict[int, GUICavity] = {}
+        
         for cav_num in range(1, 9):
-            self.cavity_widgets[cav_num] = GUICavity(cav_num,
-                                                     f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
-                                                     self.name)
+            gui_cavity = GUICavity(cav_num,
+                                   f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
+                                   self.name)
+            self.gui_cavities[cav_num] = gui_cavity
     
     def launch_cavity_workers(self):
-        for cavity_widget in self.cavity_widgets.values():
+        for cavity_widget in self.gui_cavities.values():
             cavity_widget.launch_worker()
+            
+    def set_cavity_amps(self):
+        cav_des_amp = self.spinbox.value()/8.0
+        total_remainder = 0.0
+        cavities_at_amax = []
+        
+        for gui_cavity in self.gui_cavities.values():
+            if gui_cavity.amax_pv.value < cav_des_amp:
+                total_remainder += cav_des_amp - gui_cavity.amax_pv.value
+                
+        cav_remainder = total_remainder/(8 - len(cavities_at_amax))
+        
+        for cavity_num, gui_cavity in self. gui_cavities.items():
+            if cavity_num in cavities_at_amax:
+                gui_cavity.spinbox.setValue(gui_cavity.amax_pv.value)
+            else:
+                gui_cavity.spinbox.setValue(cav_des_amp + cav_remainder)
+            
+            
 
 
 @dataclasses.dataclass
@@ -136,12 +159,21 @@ class Linac:
             cav_groupbox: QGroupBox = QGroupBox(f"CM{cm_name} Cavity {cav_num}")
             cav_layout: QVBoxLayout = QVBoxLayout()
             cav_groupbox.setLayout(cav_layout)
-            cav_widgets = widgets.cavity_widgets[cav_num]
-            cav_hlayout: QHBoxLayout = QHBoxLayout()
-            cav_hlayout.addWidget(cav_widgets.spinbox)
-            cav_hlayout.addWidget(QLabel("MV"))
-            cav_hlayout.addWidget(cav_widgets.readback_label)
-            cav_layout.addLayout(cav_hlayout)
+            cav_widgets = widgets.gui_cavities[cav_num]
+            cav_hlayout_des: QHBoxLayout = QHBoxLayout()
+            cav_hlayout_des.addStretch()
+            cav_hlayout_des.addWidget(QLabel("Desired: "))
+            cav_hlayout_des.addWidget(cav_widgets.spinbox)
+            cav_hlayout_des.addWidget(QLabel("MV"))
+            cav_hlayout_des.addStretch()
+            cav_hlayout_act: QHBoxLayout = QHBoxLayout()
+            cav_hlayout_act.addStretch()
+            cav_hlayout_act.addWidget(QLabel("Actual: "))
+            cav_hlayout_act.addWidget(cav_widgets.readback_label)
+            cav_hlayout_act.addWidget(QLabel("MV"))
+            cav_hlayout_act.addStretch()
+            cav_layout.addLayout(cav_hlayout_des)
+            cav_layout.addLayout(cav_hlayout_act)
             cav_layout.addWidget(cav_widgets.setup_button)
             cav_layout.addWidget(cav_widgets.status_label)
             all_cav_layout.addWidget(cav_groupbox,

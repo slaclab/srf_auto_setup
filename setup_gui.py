@@ -11,7 +11,7 @@ from pydm import Display
 from pydm.widgets import PyDMLabel
 from qtpy.QtCore import Signal
 
-from setup import DetuneError, SETUP_CRYOMODULES, SSACalError, SetupCavity
+from auto_setup import DetuneError, SETUP_CRYOMODULES, SSACalError, SetupCavity
 
 
 class Worker(QThread):

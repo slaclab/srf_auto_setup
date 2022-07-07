@@ -45,7 +45,7 @@ class GUICavity:
         self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
         self.worker = None
         self.setup_button.clicked.connect(self.launch_worker)
-        self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACT")
+        self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
         self.readback_label.showUnits = True
         
         # Putting this here because it otherwise gets garbage collected (?!)

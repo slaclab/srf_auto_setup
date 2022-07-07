@@ -60,11 +60,11 @@ class SetupCavity(Cavity):
                 or abs(self.detune_rfs_PV.value) > 10000):
             raise DetuneError("Cavity tuning needs to be checked")
         
-        while self.detune_rfs_PV.value > 100:
-            est_steps = (0.9 * self.detune_best_PV.value
-                         * (scLinacUtils.ESTIMATED_MICROSTEPS_PER_HZ_HL
-                            if self.cryomodule.isHarmonicLinearizer
-                            else scLinacUtils.ESTIMATED_MICROSTEPS_PER_HZ))
+        while self.detune_rfs_PV.value > 50:
+            est_steps = int(0.9 * self.detune_best_PV.value
+                            * (scLinacUtils.ESTIMATED_MICROSTEPS_PER_HZ_HL
+                               if self.cryomodule.isHarmonicLinearizer
+                               else scLinacUtils.ESTIMATED_MICROSTEPS_PER_HZ))
             self.steppertuner.move(est_steps,
                                    maxSteps=scLinacUtils.DEFAULT_STEPPER_MAX_STEPS,
                                    speed=scLinacUtils.MAX_STEPPER_SPEED)

@@ -27,7 +27,9 @@ class Worker(QThread):
     
     def run(self):
         try:
+            self.status.emit("Setting Up")
             self.cavity.setup(self.desAmp)
+            self.status.emit("Cavity Set Up")
         except (StepperError, DetuneError, SSACalError,
                 SSACalibrationError, PVInvalidError) as e:
             self.error.emit(str(e))
@@ -49,10 +51,15 @@ class GUICavity:
         # Putting this here because it otherwise gets garbage collected (?!)
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.spinbox.setValue(5)
+        
+        self.status_label: QLabel = QLabel("Ready for Setup")
     
     def launch_worker(self):
-        self.worker = Worker(SETUP_CRYOMODULES[self.cm].cavities[self.number], self.spinbox.value())
+        self.worker = Worker(SETUP_CRYOMODULES[self.cm].cavities[self.number],
+                             self.spinbox.value())
         self.worker.error.connect(print)
+        self.worker.error.connect(self.status_label.setText)
+        self.worker.status.connect(self.status_label.setText)
         self.worker.start()
 
 
@@ -66,6 +73,7 @@ class GUICryomodule:
         self.spinbox.setValue(40)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
+        self.setup_button.clicked.connect(self.launch_cavity_workers)
         self.cavity_widgets: Dict[int, GUICavity] = {}
         for cav_num in range(1, 9):
             self.cavity_widgets[cav_num] = GUICavity(cav_num,
@@ -85,6 +93,7 @@ class Linac:
     
     def __post_init__(self):
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
+        self.setup_button.clicked.connect(self.launch_cm_workers)
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.spinbox.setRange(0, 16.6 * 8 * len(self.cryomodule_names))
         self.spinbox.setValue(40 * len(self.cryomodule_names))
@@ -95,6 +104,10 @@ class Linac:
         
         for cm_name in self.cryomodule_names:
             self.add_cm_tab(cm_name)
+    
+    def launch_cm_workers(self):
+        for cm_widget in self.cm_widgets.values():
+            cm_widget.launch_cavity_workers()
     
     def add_cm_tab(self, cm_name: str):
         page: QWidget = QWidget()
@@ -130,6 +143,7 @@ class Linac:
             cav_hlayout.addWidget(cav_widgets.readback_label)
             cav_layout.addLayout(cav_hlayout)
             cav_layout.addWidget(cav_widgets.setup_button)
+            cav_layout.addWidget(cav_widgets.status_label)
             all_cav_layout.addWidget(cav_groupbox,
                                      0 if cav_num in range(1, 5) else 1,
                                      (cav_num - 1) % 4)

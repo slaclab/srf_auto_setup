@@ -1,5 +1,6 @@
 import dataclasses
-from typing import Dict, List
+from time import sleep
+from typing import Callable, Dict, List
 
 from PyQt5.QtCore import QThread
 from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
@@ -40,6 +41,7 @@ class GUICavity:
     number: int
     prefix: str
     cm: str
+    cm_spinbox_update_func: Callable
     
     def __post_init__(self):
         self.amax_pv: PV = PV(self.prefix + "ADES_MAX")
@@ -53,7 +55,16 @@ class GUICavity:
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.spinbox.setValue(5)
         
+        while not self.amax_pv.value:
+            print(f"waiting for {self.amax_pv.pvname} to connect")
+            sleep(0.0001)
+        
+        self.spinbox.setRange(0, self.amax_pv.value)
+        
         self.status_label: QLabel = QLabel("Ready for Setup")
+    
+    def connect_spinbox(self):
+        self.spinbox.valueChanged.connect(self.cm_spinbox_update_func)
     
     def launch_worker(self):
         self.worker = Worker(SETUP_CRYOMODULES[self.cm].cavities[self.number],
@@ -70,42 +81,72 @@ class GUICryomodule:
     name: str
     
     def __post_init__(self):
+        
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
-        self.spinbox.editingFinished.connect(self.set_cavity_amps)
         self.spinbox.setValue(40)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
         self.setup_button.clicked.connect(self.launch_cavity_workers)
         self.gui_cavities: Dict[int, GUICavity] = {}
         
+        self.max_amp = 0
+        
         for cav_num in range(1, 9):
             gui_cavity = GUICavity(cav_num,
                                    f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
-                                   self.name)
+                                   self.name, self.update_amp)
             self.gui_cavities[cav_num] = gui_cavity
+            while not gui_cavity.amax_pv.value:
+                print(f"waiting for {gui_cavity.amax_pv.pvname} to connect")
+                sleep(0.0001)
+            
+            self.max_amp += gui_cavity.amax_pv.value
+        
+        print(f"CM{self.name} max amp: {self.max_amp}")
+        
+        self.spinbox.setRange(0, self.max_amp)
+        
+        for gui_cavity in self.gui_cavities.values():
+            gui_cavity.connect_spinbox()
+        
+        self.spinbox.valueChanged.connect(self.set_cavity_amps)
     
     def launch_cavity_workers(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.launch_worker()
-            
+    
+    def update_amp(self):
+        total_amp = 0
+        for cavity_widget in self.gui_cavities.values():
+            total_amp += cavity_widget.spinbox.value()
+        
+        if total_amp == self.spinbox.value():
+            return
+        
+        self.spinbox.setValue(total_amp)
+    
     def set_cavity_amps(self):
-        cav_des_amp = self.spinbox.value()/8.0
+        cav_des_amp = self.spinbox.value() / 8.0
         total_remainder = 0.0
         cavities_at_amax = []
+        current_sum = 0.0
         
         for gui_cavity in self.gui_cavities.values():
+            current_sum += gui_cavity.spinbox.value()
             if gui_cavity.amax_pv.value < cav_des_amp:
                 total_remainder += cav_des_amp - gui_cavity.amax_pv.value
-                
-        cav_remainder = total_remainder/(8 - len(cavities_at_amax))
+                cavities_at_amax.append(gui_cavity.number)
         
-        for cavity_num, gui_cavity in self. gui_cavities.items():
+        if current_sum == self.spinbox.value():
+            return
+        
+        cav_remainder = total_remainder / (8 - len(cavities_at_amax))
+        
+        for cavity_num, gui_cavity in self.gui_cavities.items():
             if cavity_num in cavities_at_amax:
                 gui_cavity.spinbox.setValue(gui_cavity.amax_pv.value)
             else:
                 gui_cavity.spinbox.setValue(cav_des_amp + cav_remainder)
-            
-            
 
 
 @dataclasses.dataclass

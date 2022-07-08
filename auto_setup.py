@@ -4,12 +4,18 @@ from lcls_tools.common.pyepics_tools.pyepicsUtils import PV
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (Cavity, CryoDict, Piezo, SSA, StepperTuner)
 
+PIEZO_WITH_RF_GRAD = 6.5
+
 
 class SSACalError(Exception):
     pass
 
 
 class DetuneError(Exception):
+    pass
+
+
+class QuenchError(Exception):
     pass
 
 
@@ -46,9 +52,13 @@ class SetupCavity(Cavity):
                  stepperClass=StepperTuner, piezoClass=Piezo):
         super().__init__(cavityNum, rackObject, ssaClass=SetupSSA)
         self.quench_bypass_pv: PV = PV(self.pvPrefix + "QUENCH_BYP")
+        self.quench_latch_pv: PV = PV(self.pvPrefix + "QUENCH_LTCH")
+        self.ades_max_PV: PV = PV(self.pvPrefix + "ADES_MAX")
     
     def auto_tune(self):
-        self.selAmplitudeDesPV.put(7)
+        amp = PIEZO_WITH_RF_GRAD * self.length
+        print(f"setting CM{self.cryomodule.name} cavity {self.number} to {amp}MV")
+        self.selAmplitudeDesPV.put(min(self.ades_max_PV.value, amp))
         self.rfModeCtrlPV.put(scLinacUtils.RF_MODE_SEL)
         self.turnOn()
         piezo = self.piezo
@@ -61,6 +71,9 @@ class SetupCavity(Cavity):
             raise DetuneError("Cavity tuning needs to be checked")
         
         while self.detune_rfs_PV.value > 50:
+            if self.quench_latch_pv.value == 1:
+                raise QuenchError(f"CM{self.cryomodule.name} cavity"
+                                  f" {self.number} quenched, aborting autotune")
             est_steps = int(0.9 * self.detune_best_PV.value
                             * (scLinacUtils.ESTIMATED_MICROSTEPS_PER_HZ_HL
                                if self.cryomodule.isHarmonicLinearizer
@@ -71,17 +84,38 @@ class SetupCavity(Cavity):
     
     def setup(self, desAmp: float = 5):
         print(f"setting up cm{self.cryomodule.name} cavity {self.number}")
+        self.turnOff()
         self.ssa.calibrate(self.ssa.drivemax)
         self.auto_tune()
         self.quench_bypass_pv.put(1)
         self.runCalibration(3e7, 5e7)
         self.quench_bypass_pv.put(0)
         
-        self.selAmplitudeDesPV.put(desAmp)
+        self.selAmplitudeDesPV.put(min(5, desAmp))
         self.rfModeCtrlPV.put(scLinacUtils.RF_MODE_SEL)
         self.piezo.feedback_mode_PV.put(scLinacUtils.PIEZO_FEEDBACK_VALUE)
         self.rfModeCtrlPV.put(scLinacUtils.RF_MODE_SELA)
+        
+        if desAmp <= 10:
+            self.walk_amp(desAmp, 0.5)
+        
+        else:
+            self.walk_amp(10, 0.5)
+            self.walk_amp(desAmp, 0.1)
+        
         print(f"CM{self.cryomodule.name} Cavity{self.number} set up")
+    
+    def walk_amp(self, des_amp, step_size):
+        print(f"walking CM{self.cryomodule.name} cavity {self.number} to {des_amp}")
+        while self.selAmplitudeDesPV.value <= (des_amp - step_size):
+            if self.quench_latch_pv.value == 1:
+                raise QuenchError(f"Quench detected on CM{self.cryomodule.name}"
+                                  f" cavity {self.number}, aborting rampup")
+            self.selAmplitudeDesPV.put(self.selAmplitudeDesPV.value + step_size)
+        if self.selAmplitudeDesPV.value != des_amp:
+            self.selAmplitudeDesPV.put(des_amp)
+        
+        print(f"CM{self.cryomodule.name} cavity {self.number} at {des_amp}")
 
 
 SETUP_CRYOMODULES = CryoDict(cavityClass=SetupCavity, ssaClass=SetupSSA)

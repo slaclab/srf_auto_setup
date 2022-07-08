@@ -42,6 +42,7 @@ class GUICavity:
     prefix: str
     cm: str
     cm_spinbox_update_func: Callable
+    cm_spinbox_range_func: Callable
     
     def __post_init__(self):
         self.amax_pv: PV = PV(self.prefix + "ADES_MAX")
@@ -53,6 +54,7 @@ class GUICavity:
         
         # Putting this here because it otherwise gets garbage collected (?!)
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
+        self.spinbox.setToolTip("Press enter to update CM and Linac spinboxes")
         self.spinbox.setValue(5)
         
         while not self.amax_pv.value:
@@ -64,7 +66,8 @@ class GUICavity:
         self.status_label: QLabel = QLabel("Ready for Setup")
     
     def connect_spinbox(self):
-        self.spinbox.valueChanged.connect(self.cm_spinbox_update_func)
+        self.spinbox.editingFinished.connect(self.cm_spinbox_update_func)
+        self.amax_pv.add_callback(self.amax_callback)
     
     def launch_worker(self):
         self.worker = Worker(SETUP_CRYOMODULES[self.cm].cavities[self.number],
@@ -73,6 +76,10 @@ class GUICavity:
         self.worker.error.connect(self.status_label.setText)
         self.worker.status.connect(self.status_label.setText)
         self.worker.start()
+    
+    def amax_callback(self, value, **kwargs):
+        self.spinbox.setRange(0, value)
+        self.cm_spinbox_range_func()
 
 
 @dataclasses.dataclass
@@ -84,18 +91,30 @@ class GUICryomodule:
         
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.spinbox.setValue(40)
+        self.spinbox.setToolTip("Press enter to update cavity spinboxes")
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
         self.setup_button.clicked.connect(self.launch_cavity_workers)
         self.gui_cavities: Dict[int, GUICavity] = {}
         
-        self.max_amp = 0
-        
         for cav_num in range(1, 9):
             gui_cavity = GUICavity(cav_num,
                                    f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
-                                   self.name, self.update_amp)
+                                   self.name, self.update_amp, self.update_max_amp)
             self.gui_cavities[cav_num] = gui_cavity
+        
+        self.max_amp = 0
+        self.update_max_amp()
+        
+        for gui_cavity in self.gui_cavities.values():
+            gui_cavity.connect_spinbox()
+        
+        self.spinbox.editingFinished.connect(self.set_cavity_amps)
+    
+    def update_max_amp(self):
+        self.max_amp = 0
+        
+        for gui_cavity in self.gui_cavities.values():
             while not gui_cavity.amax_pv.value:
                 print(f"waiting for {gui_cavity.amax_pv.pvname} to connect")
                 sleep(0.0001)
@@ -103,13 +122,7 @@ class GUICryomodule:
             self.max_amp += gui_cavity.amax_pv.value
         
         print(f"CM{self.name} max amp: {self.max_amp}")
-        
         self.spinbox.setRange(0, self.max_amp)
-        
-        for gui_cavity in self.gui_cavities.values():
-            gui_cavity.connect_spinbox()
-        
-        self.spinbox.valueChanged.connect(self.set_cavity_amps)
     
     def launch_cavity_workers(self):
         for cavity_widget in self.gui_cavities.values():
@@ -161,6 +174,7 @@ class Linac:
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.spinbox.setRange(0, 16.6 * 8 * len(self.cryomodule_names))
         self.spinbox.setValue(40 * len(self.cryomodule_names))
+        self.spinbox.setEnabled(False)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.idx}B:1:AACTMEANSUM")
         self.cryomodules: List[GUICryomodule] = []
         self.cm_tab_widget: QTabWidget = QTabWidget()

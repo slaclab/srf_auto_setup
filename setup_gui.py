@@ -8,7 +8,8 @@ from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout
 from epics import caget
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
 from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
-from lcls_tools.superconducting.scLinacUtils import SSACalibrationError, StepperError
+from lcls_tools.superconducting.scLinacUtils import CavityQLoadedCalibrationError, CavityScaleFactorCalibrationError, \
+    SSACalibrationError, StepperError
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from qtpy.QtCore import Signal, Slot
@@ -33,7 +34,9 @@ class Worker(QThread):
             self.cavity.setup(self.desAmp)
             self.status.emit("Cavity Set Up")
         except (StepperError, DetuneError, SSACalError,
-                SSACalibrationError, PVInvalidError, QuenchError) as e:
+                SSACalibrationError, PVInvalidError, QuenchError,
+                CavityQLoadedCalibrationError,
+                CavityScaleFactorCalibrationError) as e:
             self.error.emit(str(e))
 
 

@@ -49,6 +49,9 @@
    </item>
    <item row="0" column="1" colspan="4">
     <widget class="QPushButton" name="machineSetupButton">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
      <property name="text">
       <string>Set Up Full Machine</string>
      </property>

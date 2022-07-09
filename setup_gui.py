@@ -3,16 +3,17 @@ from time import sleep
 from typing import Callable, Dict, List
 
 from PyQt5.QtCore import QThread
-from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
+from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
+from epics import caget
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
 from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
 from lcls_tools.superconducting.scLinacUtils import SSACalibrationError, StepperError
 from pydm import Display
 from pydm.widgets import PyDMLabel
-from qtpy.QtCore import Signal
+from qtpy.QtCore import Signal, Slot
 
-from auto_setup import DetuneError, SETUP_CRYOMODULES, SSACalError, SetupCavity
+from auto_setup import (DetuneError, QuenchError, SETUP_CRYOMODULES, SSACalError, SetupCavity)
 
 
 class Worker(QThread):
@@ -32,8 +33,18 @@ class Worker(QThread):
             self.cavity.setup(self.desAmp)
             self.status.emit("Cavity Set Up")
         except (StepperError, DetuneError, SSACalError,
-                SSACalibrationError, PVInvalidError) as e:
+                SSACalibrationError, PVInvalidError, QuenchError) as e:
             self.error.emit(str(e))
+
+
+@Slot(str)
+def handle_error(message: str):
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Critical)
+    msg.setText("Error")
+    msg.setInformativeText(message)
+    msg.setWindowTitle("Error")
+    msg.exec_()
 
 
 @dataclasses.dataclass
@@ -57,11 +68,11 @@ class GUICavity:
         self.spinbox.setToolTip("Press enter to update CM and Linac spinboxes")
         self.spinbox.setValue(5)
         
-        while not self.amax_pv.value:
+        while caget(self.amax_pv.pvname) is None:
             print(f"waiting for {self.amax_pv.pvname} to connect")
             sleep(0.0001)
         
-        self.spinbox.setRange(0, self.amax_pv.value)
+        self.spinbox.setRange(0, caget(self.amax_pv.pvname))
         
         self.status_label: QLabel = QLabel("Ready for Setup")
     
@@ -74,6 +85,7 @@ class GUICavity:
                              self.spinbox.value())
         self.worker.error.connect(print)
         self.worker.error.connect(self.status_label.setText)
+        self.worker.error.connect(handle_error)
         self.worker.status.connect(self.status_label.setText)
         self.worker.start()
     
@@ -115,11 +127,11 @@ class GUICryomodule:
         self.max_amp = 0
         
         for gui_cavity in self.gui_cavities.values():
-            while not gui_cavity.amax_pv.value:
+            while caget(gui_cavity.amax_pv.pvname) is None:
                 print(f"waiting for {gui_cavity.amax_pv.pvname} to connect")
                 sleep(0.0001)
             
-            self.max_amp += gui_cavity.amax_pv.value
+            self.max_amp += caget(gui_cavity.amax_pv.pvname)
         
         print(f"CM{self.name} max amp: {self.max_amp}")
         self.spinbox.setRange(0, self.max_amp)

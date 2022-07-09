@@ -30,9 +30,13 @@ class Worker(QThread):
     
     def run(self):
         try:
-            self.status.emit("Setting Up")
-            self.cavity.setup(self.desAmp)
-            self.status.emit("Cavity Set Up")
+            if not self.desAmp:
+                self.status.emit(f"Ignoring CM{self.cavity.cryomodule.name}"
+                                 f" cavity {self.cavity.number}")
+            else:
+                self.status.emit("Setting Up")
+                self.cavity.setup(self.desAmp)
+                self.status.emit("Cavity Set Up")
         except (StepperError, DetuneError, SSACalError,
                 SSACalibrationError, PVInvalidError, QuenchError,
                 CavityQLoadedCalibrationError,

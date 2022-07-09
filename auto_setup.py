@@ -62,17 +62,13 @@ class SetupCavity(Cavity):
         print(f"setting CM{self.cryomodule.name} cavity {self.number} to {amp}MV")
         caput(self.selAmplitudeDesPV.pvname,
               min(caget(self.ades_max_PV.pvname), amp), wait=True)
-        # self.selAmplitudeDesPV.put(min(self.ades_max_PV.value, amp))
-        # self.rfModeCtrlPV.put(scLinacUtils.RF_MODE_SEL)
         print(f"setting CM{self.cryomodule.name} cavity {self.number} to SEL")
         caput(self.rfModeCtrlPV.pvname, scLinacUtils.RF_MODE_SEL, wait=True)
         self.turnOn()
         piezo = self.piezo
         sleep(2)
         print(f"Enabling piezo for CM{self.cryomodule.name} cavity {self.number}")
-        # piezo.enable_PV.put(scLinacUtils.PIEZO_ENABLE_VALUE)
         caput(piezo.enable_PV.pvname, scLinacUtils.PIEZO_ENABLE_VALUE, wait=True)
-        # piezo.feedback_mode_PV.put(scLinacUtils.PIEZO_MANUAL_VALUE)
         caput(piezo.feedback_mode_PV.pvname, scLinacUtils.PIEZO_MANUAL_VALUE,
               wait=True)
         

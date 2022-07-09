@@ -38,6 +38,7 @@ class SetupSSA(SSA):
         try:
             self.runCalibration()
         except scLinacUtils.SSACalibrationError as e:
+            print("SSA Calibration failed, retrying")
             self.calibrate(drivemax - 0.05)
     
     @property
@@ -71,6 +72,8 @@ class SetupCavity(Cavity):
         caput(piezo.enable_PV.pvname, scLinacUtils.PIEZO_ENABLE_VALUE, wait=True)
         caput(piezo.feedback_mode_PV.pvname, scLinacUtils.PIEZO_MANUAL_VALUE,
               wait=True)
+        
+        sleep(2)
         
         if (self.detune_rfs_PV.severity == 3
                 or abs(caget(self.detune_rfs_PV.pvname)) > 10000):
@@ -109,6 +112,7 @@ class SetupCavity(Cavity):
             self.walk_amp(10, 0.5)
             self.walk_amp(desAmp, 0.1)
         
+        caput(self.rfModeCtrlPV.pvname, scLinacUtils.RF_MODE_SELAP, wait=True)
         print(f"CM{self.cryomodule.name} Cavity{self.number} set up")
     
     def walk_amp(self, des_amp, step_size):

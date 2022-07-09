@@ -94,6 +94,7 @@ class GUICavity:
         self.worker.error.connect(self.status_label.setText)
         self.worker.error.connect(handle_error)
         self.worker.status.connect(self.status_label.setText)
+        self.worker.status.connect(print)
         self.worker.start()
     
     def amax_callback(self, value, **kwargs):

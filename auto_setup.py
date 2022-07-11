@@ -75,11 +75,12 @@ class SetupCavity(Cavity):
         
         sleep(2)
         
-        if (self.detune_rfs_PV.severity == 3
-                or abs(caget(self.detune_rfs_PV.pvname)) > 10000):
-            raise DetuneError("Cavity tuning needs to be checked")
+        if (self.detune_best_PV.severity == 3
+                or abs(caget(self.detune_best_PV.pvname)) > 10000):
+            raise DetuneError("Cavity tuning needs to be checked"
+                              " (either invalid or above 10k)")
         
-        while caget(self.detune_rfs_PV.pvname) > 50:
+        while caget(self.detune_best_PV.pvname) > 50:
             if caget(self.quench_latch_pv.pvname) == 1:
                 raise QuenchError(f"CM{self.cryomodule.name} cavity"
                                   f" {self.number} quenched, aborting autotune")
@@ -95,10 +96,12 @@ class SetupCavity(Cavity):
         print(f"setting up cm{self.cryomodule.name} cavity {self.number}")
         self.turnOff()
         self.ssa.calibrate(self.ssa.drivemax)
-        self.auto_tune()
+        
         caput(self.quench_bypass_pv, 1, wait=True)
         self.runCalibration(3e7, 5e7)
         caput(self.quench_bypass_pv, 0, wait=True)
+        
+        self.auto_tune()
         
         caput(self.selAmplitudeDesPV.pvname, min(5, desAmp), wait=True)
         caput(self.rfModeCtrlPV.pvname, scLinacUtils.RF_MODE_SEL, wait=True)

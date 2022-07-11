@@ -81,7 +81,7 @@ class SetupCavity(Cavity):
                               " (either invalid or above 10k)")
         
         while caget(self.detune_best_PV.pvname) > 50:
-            if caget(self.quench_latch_pv.pvname) == 1:
+            if caget(self.quench_latch_pv) == 1:
                 raise QuenchError(f"CM{self.cryomodule.name} cavity"
                                   f" {self.number} quenched, aborting autotune")
             est_steps = int(0.9 * caget(self.detune_best_PV.pvname)

@@ -37,6 +37,7 @@ class SetupSSA(SSA):
         
         try:
             self.runCalibration()
+        
         except scLinacUtils.SSACalibrationError as e:
             print("SSA Calibration failed, retrying")
             self.calibrate(drivemax - 0.05)
@@ -60,34 +61,44 @@ class SetupCavity(Cavity):
     
     def auto_tune(self):
         amp = PIEZO_WITH_RF_GRAD * self.length
-        print(f"setting CM{self.cryomodule.name} cavity {self.number} to {amp}MV")
+        cm_name = self.cryomodule.name
+        cav_num = self.number
+        print(f"setting CM{cm_name} cavity {cav_num} to {amp}MV")
         caput(self.selAmplitudeDesPV.pvname,
               min(caget(self.ades_max_PV.pvname), amp), wait=True)
-        print(f"setting CM{self.cryomodule.name} cavity {self.number} to SEL")
+        print(f"setting CM{cm_name} cavity {cav_num} to SEL")
         caput(self.rfModeCtrlPV.pvname, scLinacUtils.RF_MODE_SEL, wait=True)
         self.turnOn()
+        
         piezo = self.piezo
         sleep(2)
-        print(f"Enabling piezo for CM{self.cryomodule.name} cavity {self.number}")
+        print(f"Enabling piezo for CM{cm_name} cavity {cav_num}")
         caput(piezo.enable_PV.pvname, scLinacUtils.PIEZO_ENABLE_VALUE, wait=True)
+        print(f"Setting piezo for CM{cm_name} cavity {cav_num} to manual")
         caput(piezo.feedback_mode_PV.pvname, scLinacUtils.PIEZO_MANUAL_VALUE,
               wait=True)
+        print(f"Setting piezo DC setpoint for CM{cm_name} cavity {cav_num} to 0")
+        caput(piezo.dc_setpoint_PV.pvname, 0, wait=True)
+        print(f"Setting piezo bias voltage for CM{cm_name} cavity {cav_num} to 25")
+        caput(piezo.bias_voltage_PV.pvname, 25, wait=True)
         
         sleep(2)
         
         if (self.detune_best_PV.severity == 3
                 or abs(caget(self.detune_best_PV.pvname)) > 10000):
-            raise DetuneError("Cavity tuning needs to be checked"
+            raise DetuneError(f"Tuning for CM{cm_name} cavity"
+                              f" {cav_num} needs to be checked"
                               " (either invalid or above 10k)")
         
         while caget(self.detune_best_PV.pvname) > 50:
             if caget(self.quench_latch_pv) == 1:
-                raise QuenchError(f"CM{self.cryomodule.name} cavity"
-                                  f" {self.number} quenched, aborting autotune")
+                raise QuenchError(f"CM{cm_name} cavity"
+                                  f" {cav_num} quenched, aborting autotune")
             est_steps = int(0.9 * caget(self.detune_best_PV.pvname)
                             * (scLinacUtils.ESTIMATED_MICROSTEPS_PER_HZ_HL
                                if self.cryomodule.isHarmonicLinearizer
                                else scLinacUtils.ESTIMATED_MICROSTEPS_PER_HZ))
+            print(f"Moving stepper for CM{cm_name} cavity {cav_num} {est_steps} steps")
             self.steppertuner.move(est_steps,
                                    maxSteps=scLinacUtils.DEFAULT_STEPPER_MAX_STEPS,
                                    speed=scLinacUtils.MAX_STEPPER_SPEED)

@@ -9,7 +9,7 @@ from epics import caget
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
 from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
 from lcls_tools.superconducting.scLinacUtils import CavityQLoadedCalibrationError, CavityScaleFactorCalibrationError, \
-    SSACalibrationError, StepperError
+    SSACalibrationError, SSAFaultError, StepperError
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from qtpy.QtCore import Signal, Slot
@@ -40,7 +40,7 @@ class Worker(QThread):
         except (StepperError, DetuneError, SSACalError,
                 SSACalibrationError, PVInvalidError, QuenchError,
                 CavityQLoadedCalibrationError,
-                CavityScaleFactorCalibrationError) as e:
+                CavityScaleFactorCalibrationError, SSAFaultError) as e:
             self.error.emit(str(e))
 
 

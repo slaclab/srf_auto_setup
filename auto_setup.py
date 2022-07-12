@@ -109,7 +109,7 @@ class SetupCavity(Cavity):
         self.ssa.calibrate(self.ssa.drivemax)
         
         caput(self.quench_bypass_pv, 1, wait=True)
-        self.runCalibration(3e7, 5e7)
+        self.runCalibration()
         caput(self.quench_bypass_pv, 0, wait=True)
         
         self.auto_tune()

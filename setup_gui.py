@@ -3,18 +3,17 @@ from time import sleep
 from typing import Callable, Dict, List
 
 from PyQt5.QtCore import QThread
-from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+from PyQt5.QtWidgets import (QDoubleSpinBox, QGridLayout, QGroupBox,
+                             QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
 from epics import caget
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
-from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
-from lcls_tools.superconducting.scLinacUtils import CavityQLoadedCalibrationError, CavityScaleFactorCalibrationError, \
-    SSACalibrationError, SSAFaultError, StepperError
+from lcls_tools.superconducting import scLinacUtils
+from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
+                                                L1BHL, LINAC_TUPLES)
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from qtpy.QtCore import Signal, Slot
-
-from auto_setup import (DetuneError, QuenchError, SETUP_CRYOMODULES, SSACalError, SetupCavity)
 
 
 class Worker(QThread):
@@ -23,9 +22,9 @@ class Worker(QThread):
     error = Signal(str)
     status = Signal(str)
     
-    def __init__(self, cavity: SetupCavity, desAmp: float = 5):
+    def __init__(self, cavity: Cavity, desAmp: float = 5):
         super().__init__()
-        self.cavity: SetupCavity = cavity
+        self.cavity: Cavity = cavity
         self.desAmp = desAmp
     
     def run(self):
@@ -35,12 +34,14 @@ class Worker(QThread):
                                  f" cavity {self.cavity.number}")
             else:
                 self.status.emit("Setting Up")
-                self.cavity.setup(self.desAmp)
+                self.cavity.setup_SELAP(self.desAmp)
                 self.status.emit("Cavity Set Up")
-        except (StepperError, DetuneError, SSACalError,
-                SSACalibrationError, PVInvalidError, QuenchError,
-                CavityQLoadedCalibrationError,
-                CavityScaleFactorCalibrationError, SSAFaultError) as e:
+        except (scLinacUtils.StepperError, scLinacUtils.DetuneError,
+                scLinacUtils.SSACalibrationError, PVInvalidError,
+                scLinacUtils.QuenchError,
+                scLinacUtils.CavityQLoadedCalibrationError,
+                scLinacUtils.CavityScaleFactorCalibrationError,
+                scLinacUtils.SSAFaultError) as e:
             self.error.emit(str(e))
 
 
@@ -88,7 +89,7 @@ class GUICavity:
         self.amax_pv.add_callback(self.amax_callback)
     
     def launch_worker(self):
-        self.worker = Worker(SETUP_CRYOMODULES[self.cm].cavities[self.number],
+        self.worker = Worker(CRYOMODULE_OBJECTS[self.cm].cavities[self.number],
                              self.spinbox.value())
         self.worker.error.connect(print)
         self.worker.error.connect(self.status_label.setText)

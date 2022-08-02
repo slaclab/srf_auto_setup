@@ -220,6 +220,8 @@ class Linac:
         self.spinbox.setRange(0, caget(self.amax_pv))
     
     def update_cm_amps(self):
+        # TODO distribute desired linac amplitude among component CMs
+        pass
     
     def launch_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():

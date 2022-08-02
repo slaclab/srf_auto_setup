@@ -77,6 +77,7 @@ class GUICavity:
         self.worker = None
         self.setup_button.clicked.connect(self.launch_worker)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
+        self.readback_label.alarmSensitiveBorder = True
         self.readback_label.showUnits = True
         
         # Putting this here because it otherwise gets garbage collected (?!)
@@ -125,6 +126,7 @@ class GUICryomodule:
         self.spinbox.setValue(40)
         self.spinbox.setToolTip("Press enter to update cavity spinboxes")
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
+        self.readback_label.alarmSensitiveBorder = True
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
         self.setup_button.clicked.connect(self.launch_cavity_workers)
         self.gui_cavities: Dict[int, GUICavity] = {}
@@ -209,6 +211,7 @@ class Linac:
         self.spinbox.setEnabled(False)
         self.aact_pv = f"ACCL:L{self.idx}B:1:AACTMEANSUM"
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
+        self.readback_label.alarmSensitiveBorder = True
         self.cryomodules: List[GUICryomodule] = []
         self.cm_tab_widget: QTabWidget = QTabWidget()
         self.gui_cryomodules: Dict[str, GUICryomodule] = {}
@@ -267,7 +270,6 @@ class Linac:
             cav_hlayout_act.addStretch()
             cav_hlayout_act.addWidget(QLabel("Actual: "))
             cav_hlayout_act.addWidget(cav_widgets.readback_label)
-            cav_hlayout_act.addWidget(QLabel("MV"))
             cav_hlayout_act.addStretch()
             cav_layout.addLayout(cav_hlayout_des)
             cav_layout.addLayout(cav_hlayout_act)
@@ -333,4 +335,4 @@ class SetupGUI(Display):
         readback = 0
         for linac in self.linac_widgets:
             readback += caget(linac.aact_pv)
-        self.ui.machine_readback_label.setText(str(readback))
+        self.ui.machine_readback_label.setText(f"{readback} MV")

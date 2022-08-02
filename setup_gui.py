@@ -78,6 +78,7 @@ class GUICavity:
         self.setup_button.clicked.connect(self.launch_worker)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
         self.readback_label.alarmSensitiveBorder = True
+        self.readback_label.alarmSensitiveContent = True
         self.readback_label.showUnits = True
         
         # Putting this here because it otherwise gets garbage collected (?!)
@@ -127,6 +128,7 @@ class GUICryomodule:
         self.spinbox.setToolTip("Press enter to update cavity spinboxes")
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
         self.readback_label.alarmSensitiveBorder = True
+        self.readback_label.alarmSensitiveContent = True
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
         self.setup_button.clicked.connect(self.launch_cavity_workers)
         self.gui_cavities: Dict[int, GUICavity] = {}
@@ -212,6 +214,7 @@ class Linac:
         self.aact_pv = f"ACCL:L{self.idx}B:1:AACTMEANSUM"
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
         self.readback_label.alarmSensitiveBorder = True
+        self.readback_label.alarmSensitiveContent = True
         self.cryomodules: List[GUICryomodule] = []
         self.cm_tab_widget: QTabWidget = QTabWidget()
         self.gui_cryomodules: Dict[str, GUICryomodule] = {}

@@ -25,11 +25,50 @@ class Worker(QThread):
     finished = Signal(str)
     progress = Signal(int)
     error = Signal(str)
+    abort = Signal(str)
     status = Signal(str)
     
-    def __init__(self, cavity: Cavity, desAmp: float = 5, selap=True,
-                 full_setup=True):
+    def __init__(self, status_label: QLabel):
         super().__init__()
+        self.status_label = status_label
+        
+        self.status.connect(print)
+        self.status.connect(self.status_label.setText)
+        self.status.connect(partial(self.status_label.setStyleSheet, STATUS_STYLESHEET))
+        
+        self.error.connect(print)
+        self.error.connect(self.status_label.setText)
+        self.error.connect(partial(self.status_label.setStyleSheet, ABORT_STYLESHEET))
+        self.error.connect(handle_error)
+        
+        self.progress.connect(print)
+        
+        self.abort.connect(print)
+        self.abort.connect(self.status_label.setText)
+        self.abort.connect(partial(self.status_label.setStyleSheet, ABORT_STYLESHEET))
+        
+        self.finished.connect(print)
+        self.finished.connect(self.status_label.setText)
+        self.finished.connect(partial(self.status_label.setStyleSheet, FINISHED_STYLESHEET))
+
+
+class OffWorker(Worker):
+    def __init__(self, cavity: Cavity, status_label: QLabel):
+        super().__init__(status_label)
+        self.cavity = cavity
+    
+    def run(self):
+        self.status.emit("Turning RF off")
+        self.cavity.turnOff()
+        self.status.emit("Turning SSA off")
+        self.cavity.ssa.turnOff()
+        self.finished.emit("RF and SSA off")
+
+
+class SetupWorker(Worker):
+    def __init__(self, cavity: Cavity, status_label: QLabel,
+                 desAmp: float = 5, selap=True, full_setup=True):
+        super().__init__(status_label)
         self.cavity: Cavity = cavity
         self.desAmp = desAmp
         self.selap = selap
@@ -41,6 +80,8 @@ class Worker(QThread):
                 self.status.emit(f"Ignoring CM{self.cavity.cryomodule.name}"
                                  f" cavity {self.cavity.number}")
             else:
+                self.status.emit("Turning SSA on if not on already")
+                self.cavity.ssa.turnOn()
                 if self.full_setup:
                     if self.selap:
                         self.status.emit("Setting up in SELAP")
@@ -51,6 +92,9 @@ class Worker(QThread):
                         self.cavity.setup_SELA(self.desAmp)
                         self.finished.emit("Cavity set up in SELA")
                 else:
+                    if caget(self.cavity.rfStatePV) != 1:
+                        self.status.emit("Turning RF on")
+                        self.cavity.turnOn()
                     if self.desAmp < caget(self.cavity.selAmplitudeActPV.pvname):
                         self.status.emit("Walking cavity down")
                         self.cavity.walk_amp(self.desAmp, step_size=0.5)
@@ -94,15 +138,21 @@ class GUICavity:
     full_setup_button: QRadioButton
     
     def __post_init__(self):
+        self._cavity = None
+        self.setup_worker: SetupWorker = None
+        self.off_worker: OffWorker = None
+        
         self.amax_pv: str = self.prefix + "ADES_MAX"
         self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
         
         self.abort_button: QPushButton = QPushButton("Abort")
         self.abort_button.setStyleSheet(ABORT_STYLESHEET)
-        self.abort_button.clicked.connect(self.kill_worker)
+        self.abort_button.clicked.connect(self.kill_workers)
         
-        self.worker = None
-        self.setup_button.clicked.connect(self.launch_worker)
+        self.turn_off_button: QPushButton = QPushButton(f"Turn off Cavity {self.number}")
+        self.turn_off_button.clicked.connect(self.launch_off_worker)
+        
+        self.setup_button.clicked.connect(self.launch_ramp_worker)
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
         self.readback_label.alarmSensitiveBorder = True
         self.readback_label.alarmSensitiveContent = True
@@ -125,29 +175,32 @@ class GUICavity:
         self.spinbox.editingFinished.connect(self.cm_spinbox_update_func)
         camonitor(self.amax_pv, callback=self.amax_callback)
     
-    def kill_worker(self):
-        self.worker.error.emit(f"Setup for CM{self.cm} cavity {self.number} aborted")
-        self.worker.terminate()
+    def kill_workers(self):
+        if self.setup_worker:
+            self.setup_worker.abort.emit(f"Setup for CM{self.cm} cavity {self.number} aborted")
+            self.setup_worker.terminate()
+        if self.off_worker:
+            self.off_worker.abort.emit(f"Turn off for CM{self.cm} cavity {self.number} aborted")
+            self.off_worker.terminate()
     
-    def launch_worker(self):
-        self.worker = Worker(CRYOMODULE_OBJECTS[self.cm].cavities[self.number],
-                             self.spinbox.value(),
-                             selap=self.selap_button.isChecked(),
-                             full_setup=self.full_setup_button.isChecked())
-        self.worker.error.connect(print)
-        self.worker.error.connect(self.status_label.setText)
-        self.worker.error.connect(partial(self.status_label.setStyleSheet, ABORT_STYLESHEET))
-        # self.worker.error.connect(handle_error)
-        
-        self.worker.status.connect(self.status_label.setText)
-        self.worker.status.connect(partial(self.status_label.setStyleSheet, STATUS_STYLESHEET))
-        self.worker.status.connect(print)
-        
-        self.worker.finished.connect(self.status_label.setText)
-        self.worker.finished.connect(print)
-        self.worker.finished.connect(partial(self.status_label.setStyleSheet, FINISHED_STYLESHEET))
-        
-        self.worker.start()
+    @property
+    def cavity(self):
+        if not self._cavity:
+            self._cavity = CRYOMODULE_OBJECTS[self.cm].cavities[self.number]
+        return self._cavity
+    
+    def launch_off_worker(self):
+        self.off_worker = OffWorker(cavity=self.cavity,
+                                    status_label=self.status_label)
+        self.off_worker.start()
+    
+    def launch_ramp_worker(self):
+        self.setup_worker = SetupWorker(cavity=self.cavity,
+                                        desAmp=self.spinbox.value(),
+                                        status_label=self.status_label,
+                                        selap=self.selap_button.isChecked(),
+                                        full_setup=self.full_setup_button.isChecked())
+        self.setup_worker.start()
     
     def amax_callback(self, value, **kwargs):
         self.spinbox.setRange(0, value)
@@ -172,9 +225,12 @@ class GUICryomodule:
         self.readback_label.alarmSensitiveContent = True
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
         
-        self.abort_button: QPushButton = QPushButton(f"Abort Setup for CM{self.name}")
+        self.abort_button: QPushButton = QPushButton(f"Abort Action for CM{self.name}")
         self.abort_button.setStyleSheet(ABORT_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cavity_workers)
+        
+        self.turn_off_button: QPushButton = QPushButton(f"Turn off CM{self.name}")
+        self.turn_off_button.clicked.connect(self.launch_turnoff_workers)
         
         self.setup_button.clicked.connect(self.launch_cavity_workers)
         self.gui_cavities: Dict[int, GUICavity] = {}
@@ -203,13 +259,17 @@ class GUICryomodule:
         print(f"CM{self.name} max amp: {max_amp}")
         self.spinbox.setRange(0, max_amp)
     
+    def launch_turnoff_workers(self):
+        for cavity_widget in self.gui_cavities.values():
+            cavity_widget.launch_off_worker()
+    
     def kill_cavity_workers(self):
         for cavity_widget in self.gui_cavities.values():
-            cavity_widget.kill_worker()
+            cavity_widget.kill_workers()
     
     def launch_cavity_workers(self):
         for cavity_widget in self.gui_cavities.values():
-            cavity_widget.launch_worker()
+            cavity_widget.launch_ramp_worker()
     
     def update_amp(self):
         total_amp = 0
@@ -260,7 +320,7 @@ class Linac:
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
         self.setup_button.clicked.connect(self.launch_cm_workers)
         
-        self.abort_button: QPushButton = QPushButton(f"Abort Setup for {self.name}")
+        self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ABORT_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cm_workers)
         
@@ -312,6 +372,7 @@ class Linac:
         hlayout.addWidget(QLabel("MV"))
         hlayout.addWidget(gui_cryomodule.readback_label)
         hlayout.addWidget(gui_cryomodule.setup_button)
+        hlayout.addWidget(gui_cryomodule.turn_off_button)
         hlayout.addWidget(gui_cryomodule.abort_button)
         hlayout.addStretch()
         
@@ -323,25 +384,21 @@ class Linac:
         vlayout.addWidget(groupbox)
         for cav_num in range(1, 9):
             cav_groupbox: QGroupBox = QGroupBox(f"CM{cm_name} Cavity {cav_num}")
-            cav_layout: QVBoxLayout = QVBoxLayout()
-            cav_groupbox.setLayout(cav_layout)
+            cav_vlayout: QVBoxLayout = QVBoxLayout()
+            cav_groupbox.setLayout(cav_vlayout)
             cav_widgets = gui_cryomodule.gui_cavities[cav_num]
-            cav_hlayout_des: QHBoxLayout = QHBoxLayout()
-            cav_hlayout_des.addStretch()
-            cav_hlayout_des.addWidget(QLabel("Desired: "))
-            cav_hlayout_des.addWidget(cav_widgets.spinbox)
-            cav_hlayout_des.addWidget(QLabel("MV"))
-            cav_hlayout_des.addStretch()
-            cav_hlayout_act: QHBoxLayout = QHBoxLayout()
-            cav_hlayout_act.addStretch()
-            cav_hlayout_act.addWidget(QLabel("Actual: "))
-            cav_hlayout_act.addWidget(cav_widgets.readback_label)
-            cav_hlayout_act.addStretch()
-            cav_layout.addLayout(cav_hlayout_des)
-            cav_layout.addLayout(cav_hlayout_act)
-            cav_layout.addWidget(cav_widgets.setup_button)
-            cav_layout.addWidget(cav_widgets.status_label)
-            cav_layout.addWidget(cav_widgets.abort_button)
+            cav_hlayout: QHBoxLayout = QHBoxLayout()
+            cav_hlayout.addStretch()
+            cav_hlayout.addWidget(QLabel("Desired: "))
+            cav_hlayout.addWidget(cav_widgets.spinbox)
+            cav_hlayout.addWidget(QLabel("MV"))
+            cav_hlayout.addWidget(cav_widgets.readback_label)
+            cav_hlayout.addStretch()
+            cav_vlayout.addLayout(cav_hlayout)
+            cav_vlayout.addWidget(cav_widgets.setup_button)
+            cav_vlayout.addWidget(cav_widgets.turn_off_button)
+            cav_vlayout.addWidget(cav_widgets.status_label)
+            cav_vlayout.addWidget(cav_widgets.abort_button)
             all_cav_layout.addWidget(cav_groupbox,
                                      0 if cav_num in range(1, 5) else 1,
                                      (cav_num - 1) % 4)

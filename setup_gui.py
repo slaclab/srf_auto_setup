@@ -40,16 +40,19 @@ class Worker(QThread):
         self.error.connect(self.status_label.setText)
         self.error.connect(partial(self.status_label.setStyleSheet, ABORT_STYLESHEET))
         self.error.connect(handle_error)
+        self.error.connect(self.deleteLater)
         
         self.progress.connect(print)
         
         self.abort.connect(print)
         self.abort.connect(self.status_label.setText)
         self.abort.connect(partial(self.status_label.setStyleSheet, ABORT_STYLESHEET))
+        self.abort.connect(self.deleteLater)
         
         self.finished.connect(print)
         self.finished.connect(self.status_label.setText)
         self.finished.connect(partial(self.status_label.setStyleSheet, FINISHED_STYLESHEET))
+        self.finished.connect(self.deleteLater)
 
 
 class OffWorker(Worker):

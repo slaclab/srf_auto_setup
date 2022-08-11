@@ -474,6 +474,7 @@ class SetupGUI(Display):
     
     def update_readback(self, **kwargs):
         readback = 0
-        for linac in self.linac_widgets:
-            readback += caget(linac.aact_pv)
+        for linac_idx in range(4):
+            aact_pv = f"ACCL:L{linac_idx}B:1:AACTMEANSUM"
+            readback += caget(aact_pv)
         self.ui.machine_readback_label.setText(f"{readback} MV")

@@ -1,77 +1,41 @@
 import dataclasses
-from functools import partial
 from time import sleep
 from typing import Callable, Dict, List
 
-from PyQt5.QtCore import QThread
+from PyQt5.QtCore import QRunnable, QThreadPool
 from PyQt5.QtWidgets import (QButtonGroup, QDoubleSpinBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QRadioButton, QTabWidget, QVBoxLayout, QWidget)
 from epics import caget, camonitor
+from lcls_tools.common.pydm_tools.displayUtils import ABORT_STYLESHEET, WorkerSignals
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
                                                 L1BHL, LINAC_TUPLES)
 from pydm import Display
 from pydm.widgets import PyDMLabel
-from qtpy.QtCore import Signal, Slot
-
-ABORT_STYLESHEET = "color: rgb(128, 0, 2);"
-FINISHED_STYLESHEET = "color: rgb(16, 128, 1);"
-STATUS_STYLESHEET = "color: rgb(7, 64, 128);"
+from qtpy.QtCore import Slot
 
 
-class Worker(QThread):
-    finished = Signal(str)
-    progress = Signal(int)
-    error = Signal(str)
-    abort = Signal(str)
-    status = Signal(str)
-    
-    def __init__(self, status_label: QLabel):
-        super().__init__()
-        self.status_label = status_label
-        
-        self.status.connect(print)
-        self.status.connect(self.status_label.setText)
-        self.status.connect(partial(self.status_label.setStyleSheet, STATUS_STYLESHEET))
-        
-        self.error.connect(print)
-        self.error.connect(self.status_label.setText)
-        self.error.connect(partial(self.status_label.setStyleSheet, ABORT_STYLESHEET))
-        self.error.connect(handle_error)
-        self.error.connect(self.deleteLater)
-        
-        self.progress.connect(print)
-        
-        self.abort.connect(print)
-        self.abort.connect(self.status_label.setText)
-        self.abort.connect(partial(self.status_label.setStyleSheet, ABORT_STYLESHEET))
-        self.abort.connect(self.deleteLater)
-        
-        self.finished.connect(print)
-        self.finished.connect(self.status_label.setText)
-        self.finished.connect(partial(self.status_label.setStyleSheet, FINISHED_STYLESHEET))
-        self.finished.connect(self.deleteLater)
-
-
-class OffWorker(Worker):
+class OffWorker(QRunnable):
     def __init__(self, cavity: Cavity, status_label: QLabel):
-        super().__init__(status_label)
+        super().__init__()
+        self.signals = WorkerSignals(status_label)
         self.cavity = cavity
     
     def run(self):
-        self.status.emit("Turning RF off")
+        self.signals.status.emit("Turning RF off")
         self.cavity.turnOff()
-        self.status.emit("Turning SSA off")
+        self.signals.status.emit("Turning SSA off")
         self.cavity.ssa.turnOff()
-        self.finished.emit("RF and SSA off")
+        self.signals.finished.emit("RF and SSA off")
 
 
-class SetupWorker(Worker):
+class SetupWorker(QRunnable):
     def __init__(self, cavity: Cavity, status_label: QLabel,
                  desAmp: float = 5, selap=True, full_setup=True):
-        super().__init__(status_label)
+        super().__init__()
+        self.signals = WorkerSignals(status_label)
         self.cavity: Cavity = cavity
         self.desAmp = desAmp
         self.selap = selap
@@ -80,43 +44,46 @@ class SetupWorker(Worker):
     def run(self):
         try:
             if not self.desAmp:
-                self.status.emit(f"Ignoring CM{self.cavity.cryomodule.name}"
-                                 f" cavity {self.cavity.number}")
+                self.signals.status.emit(f"Ignoring CM{self.cavity.cryomodule.name}"
+                                         f" cavity {self.cavity.number}")
             else:
-                self.status.emit("Turning SSA on if not on already")
+                self.signals.status.emit("Turning SSA on if not on already")
                 self.cavity.ssa.turnOn()
                 if self.full_setup:
                     if self.selap:
-                        self.status.emit("Setting up in SELAP")
+                        self.signals.status.emit("Setting up in SELAP")
                         self.cavity.setup_SELAP(self.desAmp)
-                        self.finished.emit("Cavity set up in SELAP")
+                        self.signals.finished.emit("Cavity set up in SELAP")
                     else:
-                        self.status.emit("Setting up in SELA")
+                        self.signals.status.emit("Setting up in SELA")
                         self.cavity.setup_SELA(self.desAmp)
-                        self.finished.emit("Cavity set up in SELA")
+                        self.signals.finished.emit("Cavity set up in SELA")
                 else:
                     if caget(self.cavity.rfStatePV) != 1:
-                        self.status.emit("Turning RF on")
+                        self.signals.status.emit("Turning RF on")
                         self.cavity.turnOn()
                     if self.desAmp < caget(self.cavity.selAmplitudeActPV.pvname):
-                        self.status.emit("Walking cavity down")
+                        self.signals.status.emit("Walking cavity down")
                         self.cavity.walk_amp(self.desAmp, step_size=0.5)
                     else:
-                        self.status.emit("Walking cavity up")
+                        self.signals.status.emit("Walking cavity up")
                         if self.desAmp <= 10:
                             self.cavity.walk_amp(self.desAmp, step_size=0.5)
                         else:
                             self.cavity.walk_amp(10, step_size=0.5)
                             self.cavity.walk_amp(self.desAmp, step_size=0.1)
-                    self.finished.emit("Cavity at desired amplitude")
+                    self.signals.finished.emit("Cavity at desired amplitude")
         
         except (scLinacUtils.StepperError, scLinacUtils.DetuneError,
                 scLinacUtils.SSACalibrationError, PVInvalidError,
                 scLinacUtils.QuenchError,
                 scLinacUtils.CavityQLoadedCalibrationError,
                 scLinacUtils.CavityScaleFactorCalibrationError,
-                scLinacUtils.SSAFaultError) as e:
-            self.error.emit(str(e))
+                scLinacUtils.SSAFaultError, scLinacUtils.CavityAbortError,
+                scLinacUtils.StepperAbortError) as e:
+            self.cavity.abort_flag = False
+            self.cavity.steppertuner.abort_flag = False
+            self.signals.error.emit(str(e))
 
 
 @Slot(str)
@@ -139,11 +106,10 @@ class GUICavity:
     sela_button: QRadioButton
     selap_button: QRadioButton
     full_setup_button: QRadioButton
+    parent: Display
     
     def __post_init__(self):
         self._cavity = None
-        self.setup_worker: SetupWorker = None
-        self.off_worker: OffWorker = None
         
         self.amax_pv: str = self.prefix + "ADES_MAX"
         self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
@@ -179,12 +145,9 @@ class GUICavity:
         camonitor(self.amax_pv, callback=self.amax_callback)
     
     def kill_workers(self):
-        if self.setup_worker:
-            self.setup_worker.abort.emit(f"Setup for CM{self.cm} cavity {self.number} aborted")
-            self.setup_worker.terminate()
-        if self.off_worker:
-            self.off_worker.abort.emit(f"Turn off for CM{self.cm} cavity {self.number} aborted")
-            self.off_worker.terminate()
+        self.status_label.setText(f"Sending abort request for CM{self.cm} cavity {self.number}")
+        self.cavity.abort_flag = True
+        self.cavity.steppertuner.abort_flag = True
     
     @property
     def cavity(self):
@@ -193,17 +156,19 @@ class GUICavity:
         return self._cavity
     
     def launch_off_worker(self):
-        self.off_worker = OffWorker(cavity=self.cavity,
-                                    status_label=self.status_label)
-        self.off_worker.start()
+        off_worker = OffWorker(cavity=self.cavity,
+                               status_label=self.status_label)
+        self.parent.threadpool.start(off_worker)
+        print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
     
     def launch_ramp_worker(self):
-        self.setup_worker = SetupWorker(cavity=self.cavity,
-                                        desAmp=self.spinbox.value(),
-                                        status_label=self.status_label,
-                                        selap=self.selap_button.isChecked(),
-                                        full_setup=self.full_setup_button.isChecked())
-        self.setup_worker.start()
+        setup_worker = SetupWorker(cavity=self.cavity,
+                                   desAmp=self.spinbox.value(),
+                                   status_label=self.status_label,
+                                   selap=self.selap_button.isChecked(),
+                                   full_setup=self.full_setup_button.isChecked())
+        self.parent.threadpool.start(setup_worker)
+        print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
     
     def amax_callback(self, value, **kwargs):
         self.spinbox.setRange(0, value)
@@ -217,6 +182,7 @@ class GUICryomodule:
     sela_button: QRadioButton
     selap_button: QRadioButton
     full_setup_button: QRadioButton
+    parent: Display
     
     def __post_init__(self):
         
@@ -244,7 +210,8 @@ class GUICryomodule:
                                    self.name, self.update_amp, self.update_max_amp,
                                    sela_button=self.sela_button,
                                    selap_button=self.selap_button,
-                                   full_setup_button=self.full_setup_button)
+                                   full_setup_button=self.full_setup_button,
+                                   parent=self.parent)
             self.gui_cavities[cav_num] = gui_cavity
         
         self.max_amp = 0
@@ -316,6 +283,7 @@ class Linac:
     sela_button: QRadioButton
     selap_button: QRadioButton
     full_setup_button: QRadioButton
+    parent: Display
     
     def __post_init__(self):
         self.amax = 0
@@ -366,7 +334,8 @@ class Linac:
         gui_cryomodule = GUICryomodule(linac_idx=self.idx, name=cm_name,
                                        sela_button=self.sela_button,
                                        selap_button=self.selap_button,
-                                       full_setup_button=self.full_setup_button)
+                                       full_setup_button=self.full_setup_button,
+                                       parent=self.parent)
         self.gui_cryomodules[cm_name] = gui_cryomodule
         hlayout: QHBoxLayout = QHBoxLayout()
         hlayout.addStretch()
@@ -411,11 +380,10 @@ class SetupGUI(Display):
     def ui_filename(self):
         return 'setup.ui'
     
-    def add_linac_tab(self, linac_idx: int):
-        pass
-    
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)
+        self.threadpool = QThreadPool()
+        print(f"Max thread count: {self.threadpool.maxThreadCount()}")
         
         self.selap_button_group = QButtonGroup()
         self.selap_button_group.addButton(self.ui.selap_radio_button)
@@ -433,12 +401,14 @@ class SetupGUI(Display):
                                             LINAC_TUPLES[linac_idx][1],
                                             sela_button=self.ui.sela_radio_button,
                                             selap_button=self.ui.selap_radio_button,
-                                            full_setup_button=self.ui.full_setup_button))
+                                            full_setup_button=self.ui.full_setup_button,
+                                            parent=self))
         
         self.linac_widgets.insert(2, Linac("L1BHL", 1, L1BHL,
                                            sela_button=self.ui.sela_radio_button,
                                            selap_button=self.ui.selap_radio_button,
-                                           full_setup_button=self.ui.full_setup_button))
+                                           full_setup_button=self.ui.full_setup_button,
+                                           parent=self))
         self.update_readback()
         
         self.update_amax()
@@ -477,4 +447,4 @@ class SetupGUI(Display):
         for linac_idx in range(4):
             aact_pv = f"ACCL:L{linac_idx}B:1:AACTMEANSUM"
             readback += caget(aact_pv)
-        self.ui.machine_readback_label.setText(f"{readback} MV")
+        self.ui.machine_readback_label.setText(f"{readback:.2f} MV")

@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QButtonGroup, QDoubleSpinBox, QGridLayout, QGroupBo
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QRadioButton, QTabWidget, QVBoxLayout, QWidget)
 from epics import caget, camonitor
-from lcls_tools.common.pydm_tools.displayUtils import ABORT_STYLESHEET, WorkerSignals
+from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, WorkerSignals
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
@@ -115,7 +115,7 @@ class GUICavity:
         self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
         
         self.abort_button: QPushButton = QPushButton("Abort")
-        self.abort_button.setStyleSheet(ABORT_STYLESHEET)
+        self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_workers)
         
         self.turn_off_button: QPushButton = QPushButton(f"Turn off Cavity {self.number}")
@@ -195,7 +195,7 @@ class GUICryomodule:
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
         
         self.abort_button: QPushButton = QPushButton(f"Abort Action for CM{self.name}")
-        self.abort_button.setStyleSheet(ABORT_STYLESHEET)
+        self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cavity_workers)
         
         self.turn_off_button: QPushButton = QPushButton(f"Turn off CM{self.name}")
@@ -292,7 +292,7 @@ class Linac:
         self.setup_button.clicked.connect(self.launch_cm_workers)
         
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
-        self.abort_button.setStyleSheet(ABORT_STYLESHEET)
+        self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cm_workers)
         
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()

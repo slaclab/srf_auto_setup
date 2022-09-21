@@ -59,10 +59,10 @@ class SetupWorker(QRunnable):
                         self.cavity.setup_SELA(self.desAmp)
                         self.signals.finished.emit("Cavity set up in SELA")
                 else:
-                    if caget(self.cavity.rfStatePV) != 1:
+                    if self.cavity.rfStatePV.value != 1:
                         self.signals.status.emit("Turning RF on")
                         self.cavity.turnOn()
-                    if self.desAmp < caget(self.cavity.selAmplitudeActPV.pvname):
+                    if self.desAmp < self.cavity.selAmplitudeActPV.value:
                         self.signals.status.emit("Walking cavity down")
                         self.cavity.walk_amp(self.desAmp, step_size=0.5)
                     else:

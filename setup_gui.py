@@ -323,10 +323,12 @@ class Linac:
     def kill_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.kill_cavity_workers()
+            sleep(0.5)
     
     def launch_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.launch_cavity_workers()
+            sleep(0.5)
     
     def add_cm_tab(self, cm_name: str):
         page: QWidget = QWidget()

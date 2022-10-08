@@ -232,14 +232,17 @@ class GUICryomodule:
     def launch_turnoff_workers(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.launch_off_worker()
+            sleep(0.5)
     
     def kill_cavity_workers(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.kill_workers()
+            sleep(0.5)
     
     def launch_cavity_workers(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.launch_ramp_worker()
+            sleep(0.5)
     
     def update_amp(self):
         total_amp = 0

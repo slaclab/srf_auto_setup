@@ -6,7 +6,7 @@ from PyQt5.QtCore import QRunnable, QThreadPool
 from PyQt5.QtWidgets import (QButtonGroup, QDoubleSpinBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QRadioButton, QTabWidget, QVBoxLayout, QWidget)
-from epics import caget, camonitor
+from epics import PV, caget, camonitor
 from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, WorkerSignals
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
@@ -51,11 +51,11 @@ class SetupWorker(QRunnable):
                 self.cavity.ssa.turnOn()
                 if self.full_setup:
                     if self.selap:
-                        self.signals.status.emit("Setting up in SELAP")
+                        self.signals.status.emit(f"Ramping up to {self.desAmp}MV in SELAP (full setup)")
                         self.cavity.setup_SELAP(self.desAmp)
                         self.signals.finished.emit("Cavity set up in SELAP")
                     else:
-                        self.signals.status.emit("Setting up in SELA")
+                        self.signals.status.emit(f"Ramping up to {self.desAmp}MV in SELA (RF ramp only)")
                         self.cavity.setup_SELA(self.desAmp)
                         self.signals.finished.emit("Cavity set up in SELA")
                 else:
@@ -107,11 +107,13 @@ class GUICavity:
     selap_button: QRadioButton
     full_setup_button: QRadioButton
     parent: Display
+    spinbox_button: QRadioButton
     
     def __post_init__(self):
         self._cavity = None
         
         self.amax_pv: str = self.prefix + "ADES_MAX"
+        self._ades_pv: PV = None
         self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
         
         self.abort_button: QPushButton = QPushButton("Abort")
@@ -122,10 +124,15 @@ class GUICavity:
         self.turn_off_button.clicked.connect(self.launch_off_worker)
         
         self.setup_button.clicked.connect(self.launch_ramp_worker)
-        self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
-        self.readback_label.alarmSensitiveBorder = True
-        self.readback_label.alarmSensitiveContent = True
-        self.readback_label.showUnits = True
+        self.aact_readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
+        self.aact_readback_label.alarmSensitiveBorder = True
+        self.aact_readback_label.alarmSensitiveContent = True
+        self.aact_readback_label.showUnits = True
+        
+        self.ades_readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "ADES")
+        self.ades_readback_label.alarmSensitiveBorder = True
+        self.ades_readback_label.alarmSensitiveContent = True
+        self.ades_readback_label.showUnits = True
         
         # Putting this here because it otherwise gets garbage collected (?!)
         self.spinbox: QDoubleSpinBox = QDoubleSpinBox()
@@ -139,6 +146,12 @@ class GUICavity:
         self.spinbox.setRange(0, caget(self.amax_pv))
         
         self.status_label: QLabel = QLabel("Ready for Setup")
+    
+    @property
+    def ades_pv(self):
+        if not self._ades_pv:
+            self._ades_pv = PV(self.prefix + "ADES")
+        return self._ades_pv
     
     def connect_spinbox(self):
         self.spinbox.editingFinished.connect(self.cm_spinbox_update_func)
@@ -163,7 +176,7 @@ class GUICavity:
     
     def launch_ramp_worker(self):
         setup_worker = SetupWorker(cavity=self.cavity,
-                                   desAmp=self.spinbox.value(),
+                                   desAmp=self.des_amp,
                                    status_label=self.status_label,
                                    selap=self.selap_button.isChecked(),
                                    full_setup=self.full_setup_button.isChecked())
@@ -173,6 +186,16 @@ class GUICavity:
     def amax_callback(self, value, **kwargs):
         self.spinbox.setRange(0, value)
         self.cm_spinbox_range_func()
+    
+    @property
+    def des_amp(self):
+        if self.spinbox_button.isChecked():
+            return self.spinbox.value()
+        else:
+            while not self.ades_pv.connect():
+                print(f"Waiting for {self.ades_pv.pvname} to connect")
+                sleep(1)
+            return self.ades_pv.get()
 
 
 @dataclasses.dataclass
@@ -183,6 +206,7 @@ class GUICryomodule:
     selap_button: QRadioButton
     full_setup_button: QRadioButton
     parent: Display
+    spinbox_button: QRadioButton
     
     def __post_init__(self):
         
@@ -211,7 +235,8 @@ class GUICryomodule:
                                    sela_button=self.sela_button,
                                    selap_button=self.selap_button,
                                    full_setup_button=self.full_setup_button,
-                                   parent=self.parent)
+                                   parent=self.parent,
+                                   spinbox_button=self.spinbox_button)
             self.gui_cavities[cav_num] = gui_cavity
         
         self.max_amp = 0
@@ -287,6 +312,7 @@ class Linac:
     selap_button: QRadioButton
     full_setup_button: QRadioButton
     parent: Display
+    spinbox_button: QRadioButton
     
     def __post_init__(self):
         self.amax = 0
@@ -323,10 +349,12 @@ class Linac:
     def kill_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.kill_cavity_workers()
+            sleep(0.5)
     
     def launch_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.launch_cavity_workers()
+            sleep(0.5)
     
     def add_cm_tab(self, cm_name: str):
         page: QWidget = QWidget()
@@ -338,7 +366,8 @@ class Linac:
                                        sela_button=self.sela_button,
                                        selap_button=self.selap_button,
                                        full_setup_button=self.full_setup_button,
-                                       parent=self.parent)
+                                       parent=self.parent,
+                                       spinbox_button=self.spinbox_button)
         self.gui_cryomodules[cm_name] = gui_cryomodule
         hlayout: QHBoxLayout = QHBoxLayout()
         hlayout.addStretch()
@@ -362,14 +391,24 @@ class Linac:
             cav_vlayout: QVBoxLayout = QVBoxLayout()
             cav_groupbox.setLayout(cav_vlayout)
             cav_widgets = gui_cryomodule.gui_cavities[cav_num]
-            cav_hlayout: QHBoxLayout = QHBoxLayout()
-            cav_hlayout.addStretch()
-            cav_hlayout.addWidget(QLabel("Desired: "))
-            cav_hlayout.addWidget(cav_widgets.spinbox)
-            cav_hlayout.addWidget(QLabel("MV"))
-            cav_hlayout.addWidget(cav_widgets.readback_label)
-            cav_hlayout.addStretch()
-            cav_vlayout.addLayout(cav_hlayout)
+            cav_desamp_hlayout: QHBoxLayout = QHBoxLayout()
+            cav_desamp_hlayout.addStretch()
+            cav_desamp_hlayout.addWidget(QLabel("Desired: "))
+            cav_desamp_hlayout.addWidget(cav_widgets.spinbox)
+            cav_desamp_hlayout.addWidget(QLabel("MV"))
+            cav_desamp_hlayout.addStretch()
+            
+            cav_rdbk_hlayout: QHBoxLayout = QHBoxLayout()
+            cav_rdbk_hlayout.addStretch()
+            cav_rdbk_hlayout.addWidget(QLabel("ADES:"))
+            cav_rdbk_hlayout.addWidget(cav_widgets.ades_readback_label)
+            cav_rdbk_hlayout.addStretch()
+            cav_rdbk_hlayout.addWidget(QLabel("AACT:"))
+            cav_rdbk_hlayout.addWidget(cav_widgets.aact_readback_label)
+            cav_rdbk_hlayout.addStretch()
+            
+            cav_vlayout.addLayout(cav_desamp_hlayout)
+            cav_vlayout.addLayout(cav_rdbk_hlayout)
             cav_vlayout.addWidget(cav_widgets.setup_button)
             cav_vlayout.addWidget(cav_widgets.turn_off_button)
             cav_vlayout.addWidget(cav_widgets.status_label)
@@ -393,10 +432,18 @@ class SetupGUI(Display):
         self.selap_button_group.addButton(self.ui.sela_radio_button)
         self.selap_button_group.setExclusive(True)
         self.ui.selap_radio_button.setChecked(True)
+        
         self.full_setup_button_group = QButtonGroup()
         self.full_setup_button_group.addButton(self.ui.full_setup_button)
         self.full_setup_button_group.addButton(self.ui.rf_ramp_button)
+        self.ui.full_setup_button.setChecked(True)
         self.full_setup_button_group.setExclusive(True)
+        
+        self.use_ades_button_group = QButtonGroup()
+        self.use_ades_button_group.addButton(self.ui.use_spinbox_button)
+        self.use_ades_button_group.addButton(self.ui.use_ades_button)
+        self.use_ades_button_group.setExclusive(True)
+        self.ui.use_spinbox_button.setChecked(True)
         
         self.linac_widgets: List[Linac] = []
         for linac_idx in range(0, 4):
@@ -405,13 +452,15 @@ class SetupGUI(Display):
                                             sela_button=self.ui.sela_radio_button,
                                             selap_button=self.ui.selap_radio_button,
                                             full_setup_button=self.ui.full_setup_button,
-                                            parent=self))
+                                            parent=self,
+                                            spinbox_button=self.ui.use_spinbox_button))
         
         self.linac_widgets.insert(2, Linac("L1BHL", 1, L1BHL,
                                            sela_button=self.ui.sela_radio_button,
                                            selap_button=self.ui.selap_radio_button,
                                            full_setup_button=self.ui.full_setup_button,
-                                           parent=self))
+                                           parent=self,
+                                           spinbox_button=self.ui.use_spinbox_button))
         self.update_readback()
         
         self.update_amax()

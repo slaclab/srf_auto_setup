@@ -44,35 +44,38 @@ class SetupWorker(QRunnable):
     def run(self):
         try:
             if not self.desAmp:
-                self.signals.status.emit(f"Ignoring CM{self.cavity.cryomodule.name}"
-                                         f" cavity {self.cavity.number}")
+                self.signals.status.emit(f"Turning off {self.cavity}")
+                self.cavity.turnOff()
+                self.cavity.ssa.turnOff()
+                self.signals.status.emit(f"RF and SSA off for {self.cavity}")
+            
             else:
                 self.signals.status.emit("Turning SSA on if not on already")
                 self.cavity.ssa.turnOn()
                 if self.full_setup:
                     if self.selap:
-                        self.signals.status.emit(f"Ramping up to {self.desAmp}MV in SELAP (full setup)")
+                        self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}MV in SELAP (full setup)")
                         self.cavity.setup_SELAP(self.desAmp)
-                        self.signals.finished.emit("Cavity set up in SELAP")
+                        self.signals.finished.emit(f"{self.cavity} set up in SELAP")
                     else:
-                        self.signals.status.emit(f"Ramping up to {self.desAmp}MV in SELA (RF ramp only)")
+                        self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}MV in SELA (RF ramp only)")
                         self.cavity.setup_SELA(self.desAmp)
-                        self.signals.finished.emit("Cavity set up in SELA")
+                        self.signals.finished.emit(f"{self.cavity} set up in SELA")
                 else:
                     if self.cavity.rfStatePV.value != 1:
-                        self.signals.status.emit("Turning RF on")
+                        self.signals.status.emit(f"Turning {self.cavity} RF on")
                         self.cavity.turnOn()
                     if self.desAmp < self.cavity.selAmplitudeActPV.value:
-                        self.signals.status.emit("Walking cavity down")
+                        self.signals.status.emit(f"Walking {self.cavity} down")
                         self.cavity.walk_amp(self.desAmp, step_size=0.5)
                     else:
-                        self.signals.status.emit("Walking cavity up")
+                        self.signals.status.emit(f"Walking {self.cavity} up")
                         if self.desAmp <= 10:
                             self.cavity.walk_amp(self.desAmp, step_size=0.5)
                         else:
                             self.cavity.walk_amp(10, step_size=0.5)
                             self.cavity.walk_amp(self.desAmp, step_size=0.1)
-                    self.signals.finished.emit("Cavity at desired amplitude")
+                    self.signals.finished.emit(f"{self.cavity} at desired amplitude")
         
         except (scLinacUtils.StepperError, scLinacUtils.DetuneError,
                 scLinacUtils.SSACalibrationError, PVInvalidError,

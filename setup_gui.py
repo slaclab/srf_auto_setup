@@ -50,8 +50,13 @@ class SetupWorker(QRunnable):
                 self.signals.status.emit(f"RF and SSA off for {self.cavity}")
             
             else:
-                self.signals.status.emit("Turning SSA on if not on already")
+                self.signals.status.emit(f"Resetting and turning on {self.cavity} SSA if not on already")
+                self.cavity.ssa.reset()
                 self.cavity.ssa.turnOn()
+                
+                self.signals.status.emit(f"Resetting {self.cavity} interlocks")
+                self.cavity.reset_interlocks()
+                
                 if self.full_setup:
                     if self.selap:
                         self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}MV in SELAP (full setup)")

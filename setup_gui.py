@@ -12,6 +12,7 @@ from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
                                                 L1BHL, LINAC_TUPLES)
+from lcls_tools.superconducting.scLinacUtils import CavityHWModeError
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from qtpy.QtCore import Slot
@@ -88,7 +89,7 @@ class SetupWorker(QRunnable):
                 scLinacUtils.CavityQLoadedCalibrationError,
                 scLinacUtils.CavityScaleFactorCalibrationError,
                 scLinacUtils.SSAFaultError, scLinacUtils.CavityAbortError,
-                scLinacUtils.StepperAbortError) as e:
+                scLinacUtils.StepperAbortError, CavityHWModeError) as e:
             self.cavity.abort_flag = False
             self.cavity.steppertuner.abort_flag = False
             self.signals.error.emit(str(e))

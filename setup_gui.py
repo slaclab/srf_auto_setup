@@ -3,7 +3,7 @@ from time import sleep
 from typing import Callable, Dict, List
 
 from PyQt5.QtCore import QRunnable, QThreadPool
-from PyQt5.QtWidgets import (QButtonGroup, QDoubleSpinBox, QGridLayout, QGroupBox,
+from PyQt5.QtWidgets import (QButtonGroup, QCheckBox, QDoubleSpinBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QRadioButton, QTabWidget, QVBoxLayout, QWidget)
 from epics import PV, caget, camonitor
@@ -33,13 +33,18 @@ class OffWorker(QRunnable):
 
 class SetupWorker(QRunnable):
     def __init__(self, cavity: Cavity, status_label: QLabel,
-                 desAmp: float = 5, selap=True, full_setup=True):
+                 desAmp: float = 5, selap=True,
+                 ssa_cal=True, auto_tune=True, cav_char=True, rf_ramp=True):
         super().__init__()
         self.signals = WorkerSignals(status_label)
         self.cavity: Cavity = cavity
         self.desAmp = desAmp
         self.selap = selap
-        self.full_setup = full_setup
+        
+        self.ssa_cal = ssa_cal
+        self.auto_tune = auto_tune
+        self.cav_char = cav_char
+        self.rf_ramp = rf_ramp
     
     def run(self):
         try:
@@ -102,6 +107,15 @@ def handle_error(message: str):
     msg.setInformativeText(message)
     msg.setWindowTitle("Error")
     msg.exec_()
+
+
+@dataclasses.dataclass
+class Settings:
+    spinbox_button: QRadioButton
+    ssa_cal_checkbox: QCheckBox
+    auto_tune_checkbox: QCheckBox
+    cav_char_checkbox: QCheckBox
+    rf_ramp_checkbox: QCheckBox
 
 
 @dataclasses.dataclass
@@ -187,7 +201,7 @@ class GUICavity:
                                    desAmp=self.des_amp,
                                    status_label=self.status_label,
                                    selap=self.selap_button.isChecked(),
-                                   full_setup=self.full_setup_button.isChecked())
+                                   ssa_cal=self.)
         self.parent.threadpool.start(setup_worker)
         print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
     

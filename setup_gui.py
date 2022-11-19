@@ -12,7 +12,10 @@ from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
                                                 L1BHL, LINAC_TUPLES)
-from lcls_tools.superconducting.scLinacUtils import CavityHWModeError, PIEZO_FEEDBACK_VALUE, RF_MODE_SEL, RF_MODE_SELA
+from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError,
+                                                     PIEZO_FEEDBACK_VALUE,
+                                                     RF_MODE_SEL, RF_MODE_SELA,
+                                                     RF_MODE_SELAP)
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from qtpy.QtCore import Slot
@@ -104,6 +107,8 @@ class SetupWorker(QRunnable):
                     else:
                         self.cavity.walk_amp(10, 0.5)
                         self.cavity.walk_amp(self.desAmp, 0.1)
+                    
+                    caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SELAP, wait=True)
                     
                     self.signals.finished.emit(f"{self.cavity} Ramped Up to {self.desAmp}MV")
         

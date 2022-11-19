@@ -3,16 +3,16 @@ from time import sleep
 from typing import Callable, Dict, List
 
 from PyQt5.QtCore import QRunnable, QThreadPool
-from PyQt5.QtWidgets import (QButtonGroup, QDoubleSpinBox, QGridLayout, QGroupBox,
+from PyQt5.QtWidgets import (QButtonGroup, QCheckBox, QDoubleSpinBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QRadioButton, QTabWidget, QVBoxLayout, QWidget)
-from epics import PV, caget, camonitor
+from epics import PV, caget, camonitor, caput
 from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, WorkerSignals
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
                                                 L1BHL, LINAC_TUPLES)
-from lcls_tools.superconducting.scLinacUtils import CavityHWModeError
+from lcls_tools.superconducting.scLinacUtils import CavityHWModeError, PIEZO_FEEDBACK_VALUE, RF_MODE_SEL, RF_MODE_SELA
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from qtpy.QtCore import Slot
@@ -34,13 +34,17 @@ class OffWorker(QRunnable):
 
 class SetupWorker(QRunnable):
     def __init__(self, cavity: Cavity, status_label: QLabel,
-                 desAmp: float = 5, selap=True, full_setup=True):
+                 desAmp: float = 5,
+                 ssa_cal=True, auto_tune=True, cav_char=True, rf_ramp=True):
         super().__init__()
         self.signals = WorkerSignals(status_label)
         self.cavity: Cavity = cavity
         self.desAmp = desAmp
-        self.selap = selap
-        self.full_setup = full_setup
+        
+        self.ssa_cal = ssa_cal
+        self.auto_tune = auto_tune
+        self.cav_char = cav_char
+        self.rf_ramp = rf_ramp
     
     def run(self):
         try:
@@ -58,30 +62,50 @@ class SetupWorker(QRunnable):
                 self.signals.status.emit(f"Resetting {self.cavity} interlocks")
                 self.cavity.reset_interlocks()
                 
-                if self.full_setup:
-                    if self.selap:
-                        self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}MV in SELAP (full setup)")
-                        self.cavity.setup_SELAP(self.desAmp)
-                        self.signals.finished.emit(f"{self.cavity} set up in SELAP")
+                if self.ssa_cal:
+                    self.signals.status.emit(f"Running {self.cavity} SSA Calibration")
+                    self.cavity.turnOff()
+                    self.cavity.ssa.calibrate(self.cavity.ssa.drivemax)
+                    self.signals.finished.emit(f"{self.cavity} SSA Calibrated")
+                
+                self.cavity.check_abort()
+                
+                if self.auto_tune:
+                    self.signals.status.emit(f"Tuning {self.cavity} to Resonance")
+                    self.cavity.move_to_resonance()
+                    self.signals.finished.emit(f"{self.cavity} Tuned to Resonance")
+                
+                self.cavity.check_abort()
+                
+                if self.cav_char:
+                    self.signals.status.emit(f"Running {self.cavity} Cavity Characterization")
+                    caput(self.cavity.quench_bypass_pv, 1, wait=True)
+                    self.cavity.runCalibration()
+                    caput(self.cavity.quench_bypass_pv, 0, wait=True)
+                    self.signals.finished.emit(f"{self.cavity} Characterized")
+                
+                self.cavity.check_abort()
+                
+                if self.rf_ramp:
+                    self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
+                    caput(self.cavity.selAmplitudeDesPV.pvname, min(5, self.desAmp),
+                          wait=True)
+                    caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SEL, wait=True)
+                    caput(self.cavity.piezo.feedback_mode_PV.pvname,
+                          PIEZO_FEEDBACK_VALUE, wait=True)
+                    caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SELA, wait=True)
+                    self.cavity.turnOn()
+                    
+                    self.cavity.check_abort()
+                    
+                    if self.desAmp <= 10:
+                        self.cavity.walk_amp(self.desAmp, 0.5)
+                    
                     else:
-                        self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}MV in SELA (RF ramp only)")
-                        self.cavity.setup_SELA(self.desAmp)
-                        self.signals.finished.emit(f"{self.cavity} set up in SELA")
-                else:
-                    if self.cavity.rfStatePV.value != 1:
-                        self.signals.status.emit(f"Turning {self.cavity} RF on")
-                        self.cavity.turnOn()
-                    if self.desAmp < self.cavity.selAmplitudeActPV.value:
-                        self.signals.status.emit(f"Walking {self.cavity} down")
-                        self.cavity.walk_amp(self.desAmp, step_size=0.5)
-                    else:
-                        self.signals.status.emit(f"Walking {self.cavity} up")
-                        if self.desAmp <= 10:
-                            self.cavity.walk_amp(self.desAmp, step_size=0.5)
-                        else:
-                            self.cavity.walk_amp(10, step_size=0.5)
-                            self.cavity.walk_amp(self.desAmp, step_size=0.1)
-                    self.signals.finished.emit(f"{self.cavity} at desired amplitude")
+                        self.cavity.walk_amp(10, 0.5)
+                        self.cavity.walk_amp(self.desAmp, 0.1)
+                    
+                    self.signals.finished.emit(f"{self.cavity} Ramped Up to {self.desAmp}MV")
         
         except (scLinacUtils.StepperError, scLinacUtils.DetuneError,
                 scLinacUtils.SSACalibrationError, PVInvalidError,
@@ -106,17 +130,23 @@ def handle_error(message: str):
 
 
 @dataclasses.dataclass
+class Settings:
+    spinbox_button: QRadioButton
+    ssa_cal_checkbox: QCheckBox
+    auto_tune_checkbox: QCheckBox
+    cav_char_checkbox: QCheckBox
+    rf_ramp_checkbox: QCheckBox
+
+
+@dataclasses.dataclass
 class GUICavity:
     number: int
     prefix: str
     cm: str
     cm_spinbox_update_func: Callable
     cm_spinbox_range_func: Callable
-    sela_button: QRadioButton
-    selap_button: QRadioButton
-    full_setup_button: QRadioButton
+    settings: Settings
     parent: Display
-    spinbox_button: QRadioButton
     
     def __post_init__(self):
         self._cavity = None
@@ -187,8 +217,10 @@ class GUICavity:
         setup_worker = SetupWorker(cavity=self.cavity,
                                    desAmp=self.des_amp,
                                    status_label=self.status_label,
-                                   selap=self.selap_button.isChecked(),
-                                   full_setup=self.full_setup_button.isChecked())
+                                   ssa_cal=self.settings.ssa_cal_checkbox.isChecked(),
+                                   auto_tune=self.settings.auto_tune_checkbox.isChecked(),
+                                   cav_char=self.settings.cav_char_checkbox.isChecked(),
+                                   rf_ramp=self.settings.rf_ramp_checkbox.isChecked())
         self.parent.threadpool.start(setup_worker)
         print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
     
@@ -198,24 +230,24 @@ class GUICavity:
     
     @property
     def des_amp(self):
-        if self.spinbox_button.isChecked():
+        if self.settings.spinbox_button.isChecked():
             return self.spinbox.value()
         else:
             while not self.ades_pv.connect():
                 print(f"Waiting for {self.ades_pv.pvname} to connect")
                 sleep(1)
-            return self.ades_pv.get()
+            ades = self.ades_pv.get()
+            self.spinbox.setValue(ades)
+            self.cm_spinbox_update_func()
+            return ades
 
 
 @dataclasses.dataclass
 class GUICryomodule:
     linac_idx: int
     name: str
-    sela_button: QRadioButton
-    selap_button: QRadioButton
-    full_setup_button: QRadioButton
+    settings: Settings
     parent: Display
-    spinbox_button: QRadioButton
     
     def __post_init__(self):
         
@@ -241,11 +273,8 @@ class GUICryomodule:
             gui_cavity = GUICavity(cav_num,
                                    f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
                                    self.name, self.update_amp, self.update_max_amp,
-                                   sela_button=self.sela_button,
-                                   selap_button=self.selap_button,
-                                   full_setup_button=self.full_setup_button,
-                                   parent=self.parent,
-                                   spinbox_button=self.spinbox_button)
+                                   settings=self.settings,
+                                   parent=self.parent)
             self.gui_cavities[cav_num] = gui_cavity
         
         self.max_amp = 0
@@ -317,11 +346,8 @@ class Linac:
     name: str
     idx: int
     cryomodule_names: List[str]
-    sela_button: QRadioButton
-    selap_button: QRadioButton
-    full_setup_button: QRadioButton
+    settings: Settings
     parent: Display
-    spinbox_button: QRadioButton
     
     def __post_init__(self):
         self.amax = 0
@@ -372,11 +398,8 @@ class Linac:
         self.cm_tab_widget.addTab(page, f"CM{cm_name}")
         
         gui_cryomodule = GUICryomodule(linac_idx=self.idx, name=cm_name,
-                                       sela_button=self.sela_button,
-                                       selap_button=self.selap_button,
-                                       full_setup_button=self.full_setup_button,
-                                       parent=self.parent,
-                                       spinbox_button=self.spinbox_button)
+                                       settings=self.settings,
+                                       parent=self.parent)
         self.gui_cryomodules[cm_name] = gui_cryomodule
         hlayout: QHBoxLayout = QHBoxLayout()
         hlayout.addStretch()
@@ -436,40 +459,27 @@ class SetupGUI(Display):
         self.threadpool = QThreadPool()
         print(f"Max thread count: {self.threadpool.maxThreadCount()}")
         
-        self.selap_button_group = QButtonGroup()
-        self.selap_button_group.addButton(self.ui.selap_radio_button)
-        self.selap_button_group.addButton(self.ui.sela_radio_button)
-        self.selap_button_group.setExclusive(True)
-        self.ui.selap_radio_button.setChecked(True)
-        
-        self.full_setup_button_group = QButtonGroup()
-        self.full_setup_button_group.addButton(self.ui.full_setup_button)
-        self.full_setup_button_group.addButton(self.ui.rf_ramp_button)
-        self.ui.full_setup_button.setChecked(True)
-        self.full_setup_button_group.setExclusive(True)
-        
         self.use_ades_button_group = QButtonGroup()
         self.use_ades_button_group.addButton(self.ui.use_spinbox_button)
         self.use_ades_button_group.addButton(self.ui.use_ades_button)
         self.use_ades_button_group.setExclusive(True)
         self.ui.use_spinbox_button.setChecked(True)
         
+        self.settings = Settings(spinbox_button=self.ui.use_spinbox_button,
+                                 ssa_cal_checkbox=self.ui.ssa_cal_checkbox,
+                                 auto_tune_checkbox=self.ui.autotune_checkbox,
+                                 cav_char_checkbox=self.ui.cav_char_checkbox,
+                                 rf_ramp_checkbox=self.ui.rf_ramp_checkbox)
+        
         self.linac_widgets: List[Linac] = []
         for linac_idx in range(0, 4):
             self.linac_widgets.append(Linac(f"L{linac_idx}B", linac_idx,
                                             LINAC_TUPLES[linac_idx][1],
-                                            sela_button=self.ui.sela_radio_button,
-                                            selap_button=self.ui.selap_radio_button,
-                                            full_setup_button=self.ui.full_setup_button,
-                                            parent=self,
-                                            spinbox_button=self.ui.use_spinbox_button))
+                                            settings=self.settings,
+                                            parent=self))
         
         self.linac_widgets.insert(2, Linac("L1BHL", 1, L1BHL,
-                                           sela_button=self.ui.sela_radio_button,
-                                           selap_button=self.ui.selap_radio_button,
-                                           full_setup_button=self.ui.full_setup_button,
-                                           parent=self,
-                                           spinbox_button=self.ui.use_spinbox_button))
+                                           settings=self.settings, parent=self))
         self.update_readback()
         
         self.update_amax()

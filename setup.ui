@@ -46,6 +46,19 @@
          </spacer>
         </item>
         <item>
+         <widget class="QLabel" name="label_3">
+          <property name="font">
+           <font>
+            <weight>75</weight>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="text">
+           <string>Expert Options:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QCheckBox" name="ssa_cal_checkbox">
           <property name="text">
            <string>SSA Calibration</string>

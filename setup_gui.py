@@ -6,12 +6,13 @@ from PyQt5.QtCore import QRunnable, QThreadPool
 from PyQt5.QtWidgets import (QButtonGroup, QCheckBox, QDoubleSpinBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QRadioButton, QTabWidget, QVBoxLayout, QWidget)
-from epics import PV, caget, camonitor
+from epics import PV, caget, camonitor, caput
 from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, WorkerSignals
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
                                                 L1BHL, LINAC_TUPLES)
+from lcls_tools.superconducting.scLinacUtils import PIEZO_FEEDBACK_VALUE, RF_MODE_SEL, RF_MODE_SELA
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from qtpy.QtCore import Slot
@@ -33,13 +34,12 @@ class OffWorker(QRunnable):
 
 class SetupWorker(QRunnable):
     def __init__(self, cavity: Cavity, status_label: QLabel,
-                 desAmp: float = 5, selap=True,
+                 desAmp: float = 5,
                  ssa_cal=True, auto_tune=True, cav_char=True, rf_ramp=True):
         super().__init__()
         self.signals = WorkerSignals(status_label)
         self.cavity: Cavity = cavity
         self.desAmp = desAmp
-        self.selap = selap
         
         self.ssa_cal = ssa_cal
         self.auto_tune = auto_tune
@@ -62,30 +62,46 @@ class SetupWorker(QRunnable):
                 self.signals.status.emit(f"Resetting {self.cavity} interlocks")
                 self.cavity.reset_interlocks()
                 
-                if self.full_setup:
-                    if self.selap:
-                        self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}MV in SELAP (full setup)")
-                        self.cavity.setup_SELAP(self.desAmp)
-                        self.signals.finished.emit(f"{self.cavity} set up in SELAP")
+                if self.ssa_cal:
+                    self.signals.status.emit(f"Running {self.cavity} SSA Calibration")
+                    self.cavity.turnOff()
+                    self.cavity.ssa.calibrate(self.ssa.drivemax)
+                
+                self.cavity.check_abort()
+                
+                if self.auto_tune:
+                    self.signals.status.emit(f"Tuning {self.cavity} to Resonance")
+                    self.cavity.move_to_resonance()
+                
+                self.cavity.check_abort()
+                
+                if self.cav_char:
+                    self.signals.status.emit(f"Running {self.cavity} Cavity Characterization")
+                    caput(self.cavity.quench_bypass_pv, 1, wait=True)
+                    self.cavity.runCalibration()
+                    caput(self.cavity.quench_bypass_pv, 0, wait=True)
+                
+                self.cavity.check_abort()
+                
+                if self.rf_ramp:
+                    self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
+                    caput(self.cavity.selAmplitudeDesPV.pvname, min(5, self.desAmp),
+                          wait=True)
+                    caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SEL, wait=True)
+                    caput(self.cavity.piezo.feedback_mode_PV.pvname,
+                          PIEZO_FEEDBACK_VALUE, wait=True)
+                    caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SELA, wait=True)
+                    
+                    self.check_abort()
+                    
+                    if self.desAmp <= 10:
+                        self.walk_amp(self.desAmp, 0.5)
+                    
                     else:
-                        self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}MV in SELA (RF ramp only)")
-                        self.cavity.setup_SELA(self.desAmp)
-                        self.signals.finished.emit(f"{self.cavity} set up in SELA")
-                else:
-                    if self.cavity.rfStatePV.value != 1:
-                        self.signals.status.emit(f"Turning {self.cavity} RF on")
-                        self.cavity.turnOn()
-                    if self.desAmp < self.cavity.selAmplitudeActPV.value:
-                        self.signals.status.emit(f"Walking {self.cavity} down")
-                        self.cavity.walk_amp(self.desAmp, step_size=0.5)
-                    else:
-                        self.signals.status.emit(f"Walking {self.cavity} up")
-                        if self.desAmp <= 10:
-                            self.cavity.walk_amp(self.desAmp, step_size=0.5)
-                        else:
-                            self.cavity.walk_amp(10, step_size=0.5)
-                            self.cavity.walk_amp(self.desAmp, step_size=0.1)
-                    self.signals.finished.emit(f"{self.cavity} at desired amplitude")
+                        self.walk_amp(10, 0.5)
+                        self.walk_amp(self.desAmp, 0.1)
+                
+                self.signals.finished.emit(f"{self.cavity} Set Up as Desired")
         
         except (scLinacUtils.StepperError, scLinacUtils.DetuneError,
                 scLinacUtils.SSACalibrationError, PVInvalidError,
@@ -125,11 +141,8 @@ class GUICavity:
     cm: str
     cm_spinbox_update_func: Callable
     cm_spinbox_range_func: Callable
-    sela_button: QRadioButton
-    selap_button: QRadioButton
-    full_setup_button: QRadioButton
+    settings: Settings
     parent: Display
-    spinbox_button: QRadioButton
     
     def __post_init__(self):
         self._cavity = None
@@ -200,8 +213,10 @@ class GUICavity:
         setup_worker = SetupWorker(cavity=self.cavity,
                                    desAmp=self.des_amp,
                                    status_label=self.status_label,
-                                   selap=self.selap_button.isChecked(),
-                                   ssa_cal=self.)
+                                   ssa_cal=self.settings.ssa_cal_checkbox.isChecked(),
+                                   auto_tune=self.settings.auto_tune_checkbox.isChecked(),
+                                   cav_char=self.settings.cav_char_checkbox.isChecked(),
+                                   rf_ramp=self.settings.rf_ramp_checkbox.isChecked())
         self.parent.threadpool.start(setup_worker)
         print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
     

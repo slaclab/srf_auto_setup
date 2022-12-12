@@ -82,7 +82,7 @@ class SetupWorker(QRunnable):
                 
                 if self.cav_char:
                     self.signals.status.emit(f"Running {self.cavity} Cavity Characterization")
-                    self.cavity.runCalibration()
+                    self.cavity.characterize()
                     self.cavity.calc_probe_q_pv.put(1)
                     self.signals.finished.emit(f"{self.cavity} Characterized")
                 

@@ -201,7 +201,7 @@ class GUICavity:
     
     def launch_ramp_worker(self):
         setup_worker = SetupWorker(cavity=self.cavity,
-                                   desAmp=self.spinbox.value(),
+                                   desAmp=self.spinbox.value,
                                    status_label=self.status_label,
                                    ssa_cal=self.settings.ssa_cal_checkbox.isChecked(),
                                    auto_tune=self.settings.auto_tune_checkbox.isChecked(),

@@ -90,13 +90,15 @@ class SetupWorker(QRunnable):
                 
                 if self.rf_ramp:
                     self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
-                    caput(self.cavity.selAmplitudeDesPV.pvname, min(5, self.desAmp),
-                          wait=True)
                     caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SEL, wait=True)
                     caput(self.cavity.piezo.feedback_mode_PV.pvname,
                           PIEZO_FEEDBACK_VALUE, wait=True)
                     caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SELA, wait=True)
-                    self.cavity.turnOn()
+                    
+                    if caget(self.cavity.rfStatePV.pvname) == 0:
+                        caput(self.cavity.selAmplitudeDesPV.pvname, min(5, self.desAmp),
+                              wait=True)
+                        self.cavity.turnOn()
                     
                     self.cavity.check_abort()
                     

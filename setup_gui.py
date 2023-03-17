@@ -2,7 +2,7 @@ import dataclasses
 from time import sleep
 from typing import Dict, List
 
-from PyQt5.QtCore import QRunnable, QThreadPool
+from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
 from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
@@ -14,7 +14,7 @@ from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
                                                 L1BHL, LINAC_TUPLES)
 from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError,
                                                      PIEZO_FEEDBACK_VALUE,
-                                                     RF_MODE_SEL, RF_MODE_SELA,
+                                                     RF_MODE_SELA,
                                                      RF_MODE_SELAP)
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMSpinbox
@@ -44,10 +44,10 @@ class SetupWorker(QRunnable):
         self.cavity: Cavity = cavity
         self.desAmp = desAmp
         
-        self.ssa_cal = ssa_cal
-        self.auto_tune = auto_tune
-        self.cav_char = cav_char
-        self.rf_ramp = rf_ramp
+        self.ssa_cal: bool = ssa_cal
+        self.auto_tune: bool = auto_tune
+        self.cav_char: bool = cav_char
+        self.rf_ramp: bool = rf_ramp
     
     def run(self):
         try:
@@ -90,7 +90,6 @@ class SetupWorker(QRunnable):
                 
                 if self.rf_ramp:
                     self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
-                    caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SEL, wait=True)
                     caput(self.cavity.piezo.feedback_mode_PV.pvname,
                           PIEZO_FEEDBACK_VALUE, wait=True)
                     caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SELA, wait=True)
@@ -155,13 +154,13 @@ class GUICavity:
         self._cavity = None
         
         self._ades_pv: PV = None
-        self.setup_button = QPushButton(f"Set Up Cavity {self.number}")
+        self.setup_button = QPushButton(f"Set Up")
         
         self.abort_button: QPushButton = QPushButton("Abort")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_workers)
         
-        self.turn_off_button: QPushButton = QPushButton(f"Turn off Cavity {self.number}")
+        self.turn_off_button: QPushButton = QPushButton(f"Turn Off")
         self.turn_off_button.clicked.connect(self.launch_off_worker)
         
         self.setup_button.clicked.connect(self.launch_ramp_worker)
@@ -175,8 +174,11 @@ class GUICavity:
         self.spinbox.alarmSensitiveContent = True
         self.spinbox.alarmSensitiveBorder = True
         self.spinbox.showUnits = True
+        self.spinbox.showStepExponent = False
         
         self.status_label: QLabel = QLabel("Ready for Setup")
+        self.status_label.setAlignment(Qt.AlignHCenter)
+        self.status_label.setWordWrap(True)
     
     @property
     def ades_pv(self):
@@ -327,6 +329,8 @@ class Linac:
         vlayout.addWidget(groupbox)
         for cav_num in range(1, 9):
             cav_groupbox: QGroupBox = QGroupBox(f"CM{cm_name} Cavity {cav_num}")
+            cav_groupbox.setStyleSheet("QGroupBox { font-weight: bold; } ")
+            
             cav_vlayout: QVBoxLayout = QVBoxLayout()
             cav_groupbox.setLayout(cav_vlayout)
             cav_widgets = gui_cryomodule.gui_cavities[cav_num]
@@ -337,11 +341,16 @@ class Linac:
             cav_desamp_hlayout.addWidget(cav_widgets.aact_readback_label)
             cav_desamp_hlayout.addStretch()
             
+            cav_button_hlayout: QHBoxLayout = QHBoxLayout()
+            cav_button_hlayout.addStretch()
+            cav_button_hlayout.addWidget(cav_widgets.setup_button)
+            cav_button_hlayout.addWidget(cav_widgets.turn_off_button)
+            cav_button_hlayout.addWidget(cav_widgets.abort_button)
+            cav_button_hlayout.addStretch()
+            
             cav_vlayout.addLayout(cav_desamp_hlayout)
-            cav_vlayout.addWidget(cav_widgets.setup_button)
-            cav_vlayout.addWidget(cav_widgets.turn_off_button)
+            cav_vlayout.addLayout(cav_button_hlayout)
             cav_vlayout.addWidget(cav_widgets.status_label)
-            cav_vlayout.addWidget(cav_widgets.abort_button)
             all_cav_layout.addWidget(cav_groupbox,
                                      0 if cav_num in range(1, 5) else 1,
                                      (cav_num - 1) % 4)
@@ -355,6 +364,12 @@ class SetupGUI(Display):
         super(SetupGUI, self).__init__(parent=parent, args=args)
         self.threadpool = QThreadPool()
         print(f"Max thread count: {self.threadpool.maxThreadCount()}")
+        
+        self.checkThreadTimer = QTimer(self)
+        # I think this is 1 second?
+        self.checkThreadTimer.setInterval(1000)
+        self.checkThreadTimer.timeout.connect(self.update_threadcount)
+        self.checkThreadTimer.start()
         
         self.settings = Settings(ssa_cal_checkbox=self.ui.ssa_cal_checkbox,
                                  auto_tune_checkbox=self.ui.autotune_checkbox,
@@ -398,3 +413,6 @@ class SetupGUI(Display):
             aact_pv = f"ACCL:L{linac_idx}B:1:AACTMEANSUM"
             readback += caget(aact_pv)
         self.ui.machine_readback_label.setText(f"{readback:.2f} MV")
+    
+    def update_threadcount(self):
+        self.ui.threadcount_label.setText(f"{self.threadpool.activeThreadCount()}")

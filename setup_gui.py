@@ -275,10 +275,12 @@ class Linac:
     def __post_init__(self):
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
         self.setup_button.clicked.connect(self.launch_cm_workers)
+        self.setup_button.setEnabled(False)
         
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cm_workers)
+        self.abort_button.setEnabled(False)
         
         self.aact_pv = f"ACCL:L{self.idx}B:1:AACTMEANSUM"
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)

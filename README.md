@@ -1,12 +1,25 @@
+# SRF Auto Setup
+
+Please refer to https://confluence.slac.stanford.edu/display/SRF/SRF+Auto+Setup for the most up to date documentation
+
+
 ## Installation and Setup Instructions
 
 These instructions were made using an Ubuntu Bionic distribution, instructions for other flavours of linux may vary.
+
+
+---------------------------------
 
 ### Packages to Install
 
 The dependencies for this project can be installed by running the following command:
 
 ```apt install git python3.8 python3-pip libxcb-xinerama0```
+
+
+
+---------------------------------
+
 
 ### Repositories to Clone
 
@@ -25,6 +38,10 @@ git clone --recursive -b 7.0 https://git.launchpad.net/epics-base base-7.0
 
 ```
 
+
+---------------------------------
+
+
 ### Builing EPICS Base 7.0
 
 To build EPICS base, go into the cloned directory for epics and run the following commands:
@@ -40,6 +57,9 @@ This may take some time to finish building. Once completed, you can add the crea
 ```export PATH=$PATH:<location_of_epics>/bin/linux-x86_64/```
 
 This can be verified by running `caget` from any location, it should report that a PV was not specified in the command.
+
+
+---------------------------------
 
 
 ### Seting Up Python Packages
@@ -79,7 +99,7 @@ Finally, for the SRF Auto Setup GUI we will need to define an environment variab
 ```export PYDM_DEFAULT_PROTOCOL=ca```
 
 
-
+---------------------------------
 
 
 ## Running the sc_rf_service on Simulacrum
@@ -90,6 +110,7 @@ Running the sc_rf_service on the simulacrum for this project can be done by goin
 
 Once the service has started, we can run the SRF Auto Setup GUI.
 
+---------------------------------
 
 ## Running SRF Auto Setup
 
@@ -101,4 +122,5 @@ The GUI should open up and be ready for use.
 
 
 
-# singleButtonRampUp
+
+

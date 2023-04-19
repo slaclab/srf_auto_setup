@@ -64,8 +64,7 @@ This can be verified by running `caget` from any location, it should report that
 
 ### Seting Up Python Packages
 
-LCLS Tools
-==========
+#### LCLS Tools
 
 You will also need to install some python packages for this project, the LCLS Tools package can be installed from source by going into the cloned directory for LCLS Tools and running:
 
@@ -82,8 +81,8 @@ This can be verified by starting a python interpreter (using the `python3.8` com
 If you do not receive an ModuleImportError then the package has been found.
 
 
-Other Packages
-==============
+#### Other Packages
+
 
 The remaining dependencies do not need to be installed from source, so we can use pip to install them from the package registries:
 

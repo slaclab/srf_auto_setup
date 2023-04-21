@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
 from epics import PV, caget, camonitor, caput
+from epics.ca import withInitialContext
 from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, WorkerSignals
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
@@ -27,6 +28,7 @@ class OffWorker(QRunnable):
         self.signals = WorkerSignals(status_label)
         self.cavity = cavity
     
+    @withInitialContext
     def run(self):
         self.signals.status.emit("Turning RF off")
         self.cavity.turnOff()
@@ -49,6 +51,7 @@ class SetupWorker(QRunnable):
         self.cav_char: bool = cav_char
         self.rf_ramp: bool = rf_ramp
     
+    @withInitialContext
     def run(self):
         try:
             if not self.desAmp:

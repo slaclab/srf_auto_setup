@@ -281,7 +281,7 @@ class Linac:
         
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.kill_cm_workers
+        self.abort_button.clicked.connect(self.kill_cm_workers)
         self.aact_pv = f"ACCL:L{self.idx}B:1:AACTMEANSUM"
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
         self.readback_label.alarmSensitiveBorder = True
@@ -293,11 +293,10 @@ class Linac:
         
         for cm_name in self.cryomodule_names:
             self.add_cm_tab(cm_name)
-        
-        def kill_cm_workers(self):
-            
-            for gui_cm in self.gui_cryomodules.values():
-                gui_cm.kill_cavity_workers()
+    
+    def kill_cm_workers(self):
+        for gui_cm in self.gui_cryomodules.values():
+            gui_cm.kill_cavity_workers()
     
     def launch_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():

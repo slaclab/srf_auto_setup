@@ -358,7 +358,7 @@ class Linac:
 
 class SetupGUI(Display):
     def ui_filename(self):
-        return 'setup.ui'
+        return 'setup_gui.ui'
     
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)

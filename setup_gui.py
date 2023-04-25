@@ -1,5 +1,4 @@
 import dataclasses
-from time import sleep
 from typing import Dict, List
 
 from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
@@ -7,7 +6,8 @@ from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
 from epics import PV, caget, camonitor, caput
-from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, WorkerSignals
+from epics.ca import withInitialContext
+from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, STATUS_STYLESHEET, WorkerSignals
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
@@ -27,6 +27,7 @@ class OffWorker(QRunnable):
         self.signals = WorkerSignals(status_label)
         self.cavity = cavity
     
+    @withInitialContext
     def run(self):
         self.signals.status.emit("Turning RF off")
         self.cavity.turnOff()
@@ -48,9 +49,13 @@ class SetupWorker(QRunnable):
         self.auto_tune: bool = auto_tune
         self.cav_char: bool = cav_char
         self.rf_ramp: bool = rf_ramp
+        
+        self.signals.status.emit(f"{self.cavity} queued")
     
+    @withInitialContext
     def run(self):
         try:
+            self.cavity.check_abort()
             if not self.desAmp:
                 self.signals.status.emit(f"Turning off {self.cavity}")
                 self.cavity.turnOff()
@@ -188,6 +193,7 @@ class GUICavity:
     
     def kill_workers(self):
         self.status_label.setText(f"Sending abort request for CM{self.cm} cavity {self.number}")
+        self.status_label.setStyleSheet(STATUS_STYLESHEET)
         self.cavity.abort_flag = True
         self.cavity.steppertuner.abort_flag = True
     
@@ -251,17 +257,14 @@ class GUICryomodule:
     def launch_turnoff_workers(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.launch_off_worker()
-            sleep(0.5)
     
     def kill_cavity_workers(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.kill_workers()
-            sleep(0.5)
     
     def launch_cavity_workers(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.launch_ramp_worker()
-            sleep(0.5)
 
 
 @dataclasses.dataclass
@@ -275,13 +278,10 @@ class Linac:
     def __post_init__(self):
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
         self.setup_button.clicked.connect(self.launch_cm_workers)
-        self.setup_button.setEnabled(False)
         
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cm_workers)
-        self.abort_button.setEnabled(False)
-        
         self.aact_pv = f"ACCL:L{self.idx}B:1:AACTMEANSUM"
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
         self.readback_label.alarmSensitiveBorder = True
@@ -297,12 +297,10 @@ class Linac:
     def kill_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.kill_cavity_workers()
-            sleep(0.5)
     
     def launch_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.launch_cavity_workers()
-            sleep(0.5)
     
     def add_cm_tab(self, cm_name: str):
         page: QWidget = QWidget()
@@ -360,7 +358,7 @@ class Linac:
 
 class SetupGUI(Display):
     def ui_filename(self):
-        return 'setup.ui'
+        return 'setup_gui.ui'
     
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)

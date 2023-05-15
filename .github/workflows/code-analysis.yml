@@ -1,10 +1,10 @@
 name: Static Code Analysis
-run-name: ${{github.actor}} is running static code analsysi for SRF autosetup
+run-name: ${{github.actor}} is running static code analysis for SRF autosetup
 on: [push]
 jobs:
-  Pylint:
+  flake8:
     runs-on: self-hosted
     steps:
-      - run: echo "Starting static code analysis using Pylint"
-      - run: python3 -m pylint setup_gui.py
-      - run: echo "Finished static code analysis using Pylint"
+      - run: echo "Starting static code analysis using flake8"
+      - run: python3 -m flake8 setup_gui.py
+      - run: echo "Finished static code analysis using flake8"

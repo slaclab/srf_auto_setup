@@ -1,0 +1,10 @@
+name: Static Code Analysis
+run-name: ${{github.actor}} is running static code analsysi for SRF autosetup
+on: [push]
+jobs:
+  Pylint:
+    runs-on: self-hosted
+    steps:
+      - run: echo "Starting static code analysis using Pylint"
+      - run: python38 -m pylint .
+      - run: echo "Finished static code analysis using Pylint"

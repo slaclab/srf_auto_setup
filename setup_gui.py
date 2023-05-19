@@ -79,9 +79,13 @@ class SetupWorker(QRunnable):
                 self.cavity.check_abort()
                 
                 if self.auto_tune:
-                    self.signals.status.emit(f"Tuning {self.cavity} to Resonance")
-                    self.cavity.move_to_resonance()
-                    self.signals.finished.emit(f"{self.cavity} Tuned to Resonance")
+                    if not self.cavity.cryomodule.isHarmonicLinearizer:
+                        self.signals.status.emit(f"Tuning {self.cavity} to Resonance")
+                        self.cavity.move_to_resonance()
+                        self.signals.finished.emit(f"{self.cavity} Tuned to Resonance")
+                    else:
+                        self.signals.error.emit("Autotune not allowed for HLs")
+                        return
                 
                 self.cavity.check_abort()
                 

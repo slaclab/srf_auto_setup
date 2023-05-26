@@ -5,7 +5,7 @@ from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
 from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
-from epics import PV, caget, camonitor, caput
+from epics import PV, caget, camonitor
 from epics.ca import withInitialContext
 from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, STATUS_STYLESHEET, WorkerSignals
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
@@ -95,13 +95,11 @@ class SetupWorker(QRunnable):
                 
                 if self.rf_ramp:
                     self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
-                    caput(self.cavity.piezo.feedback_mode_PV.pvname,
-                          PIEZO_FEEDBACK_VALUE, wait=True)
-                    caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SELA, wait=True)
+                    self.cavity.piezo.feedback_mode_PV.put(PIEZO_FEEDBACK_VALUE)
+                    self.cavity.rfModeCtrlPV.put(RF_MODE_SELA)
                     
-                    if caget(self.cavity.rfStatePV.pvname) == 0:
-                        caput(self.cavity.selAmplitudeDesPV.pvname, min(5, self.desAmp),
-                              wait=True)
+                    if self.cavity.rfStatePV.get() == 0:
+                        self.cavity.selAmplitudeDesPV.put(min(5, self.desAmp))
                         self.cavity.turnOn()
                     
                     self.cavity.check_abort()
@@ -113,7 +111,7 @@ class SetupWorker(QRunnable):
                         self.cavity.walk_amp(10, 0.5)
                         self.cavity.walk_amp(self.desAmp, 0.1)
                     
-                    caput(self.cavity.rfModeCtrlPV.pvname, RF_MODE_SELAP, wait=True)
+                    self.cavity.rfModeCtrlPV.put(RF_MODE_SELAP)
                     
                     self.signals.finished.emit(f"{self.cavity} Ramped Up to {self.desAmp}MV")
         
@@ -282,7 +280,9 @@ class Linac:
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cm_workers)
-        self.aact_pv = f"ACCL:L{self.idx}B:1:AACTMEANSUM"
+        self.aact_pv = (f"ACCL:L{self.idx}B:1:AACTMEANSUM"
+                        if self.name is not "L1BHL"
+                        else "ACCL:L1B:1:HL_AACTMEANSUM")
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
         self.readback_label.alarmSensitiveBorder = True
         self.readback_label.alarmSensitiveContent = True

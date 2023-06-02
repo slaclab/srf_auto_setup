@@ -121,7 +121,8 @@ class SetupWorker(QRunnable):
                 scLinacUtils.CavityQLoadedCalibrationError,
                 scLinacUtils.CavityScaleFactorCalibrationError,
                 scLinacUtils.SSAFaultError, scLinacUtils.CavityAbortError,
-                scLinacUtils.StepperAbortError, CavityHWModeError) as e:
+                scLinacUtils.StepperAbortError, CavityHWModeError,
+                scLinacUtils.CavityFaultError) as e:
             self.cavity.abort_flag = False
             self.cavity.steppertuner.abort_flag = False
             self.signals.error.emit(str(e))

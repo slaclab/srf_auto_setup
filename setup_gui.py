@@ -187,7 +187,7 @@ class GUICavity:
         
         self.expert_screen_button: PyDMEDMDisplayButton = PyDMEDMDisplayButton()
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]
-        self.expert_screen_button.macros = self.cavity.edm_macro_string + (',' + "SELTAB=5,SELCHAR=3")
+        self.expert_screen_button.macros = self.cavity.edm_macro_string + (',' + "SELTAB=0,SELCHAR=3")
         self.expert_screen_button.setToolTip("EDM expert screens")
     
     @property

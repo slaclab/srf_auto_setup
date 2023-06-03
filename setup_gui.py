@@ -5,10 +5,11 @@ from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
 from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
-from epics import PV, caget, camonitor
+from edmbutton import PyDMEDMDisplayButton
+from epics import camonitor
 from epics.ca import withInitialContext
 from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, STATUS_STYLESHEET, WorkerSignals
-from lcls_tools.common.pyepics_tools.pyepicsUtils import PVInvalidError
+from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
                                                 L1BHL, LINAC_TUPLES)
@@ -183,6 +184,11 @@ class GUICavity:
         self.status_label: QLabel = QLabel("Ready for Setup")
         self.status_label.setAlignment(Qt.AlignHCenter)
         self.status_label.setWordWrap(True)
+        
+        self.expert_screen_button: PyDMEDMDisplayButton = PyDMEDMDisplayButton()
+        self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]
+        self.expert_screen_button.macros = self.cavity.edm_macro_string + (',' + "SELTAB=5,SELCHAR=3")
+        self.expert_screen_button.setToolTip("EDM expert screens")
     
     @property
     def ades_pv(self):
@@ -197,7 +203,7 @@ class GUICavity:
         self.cavity.steppertuner.abort_flag = True
     
     @property
-    def cavity(self):
+    def cavity(self) -> Cavity:
         if not self._cavity:
             self._cavity = CRYOMODULE_OBJECTS[self.cm].cavities[self.number]
         return self._cavity
@@ -282,7 +288,7 @@ class Linac:
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cm_workers)
         self.aact_pv = (f"ACCL:L{self.idx}B:1:AACTMEANSUM"
-                        if self.name is not "L1BHL"
+                        if self.name != "L1BHL"
                         else "ACCL:L1B:1:HL_AACTMEANSUM")
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
         self.readback_label.alarmSensitiveBorder = True
@@ -347,6 +353,7 @@ class Linac:
             cav_button_hlayout.addWidget(cav_widgets.setup_button)
             cav_button_hlayout.addWidget(cav_widgets.turn_off_button)
             cav_button_hlayout.addWidget(cav_widgets.abort_button)
+            cav_button_hlayout.addWidget(cav_widgets.expert_screen_button)
             cav_button_hlayout.addStretch()
             
             cav_vlayout.addLayout(cav_desamp_hlayout)
@@ -386,6 +393,9 @@ class SetupGUI(Display):
         
         self.linac_widgets.insert(2, Linac("L1BHL", 1, L1BHL,
                                            settings=self.settings, parent=self))
+        
+        self.linac_aact_pvs: List[PV] = [PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)]
+        
         self.update_readback()
         
         linac_tab_widget: QTabWidget = self.ui.tabWidget_linac
@@ -410,9 +420,8 @@ class SetupGUI(Display):
     
     def update_readback(self, **kwargs):
         readback = 0
-        for linac_idx in range(4):
-            aact_pv = f"ACCL:L{linac_idx}B:1:AACTMEANSUM"
-            readback += caget(aact_pv)
+        for linac_aact_pv in self.linac_aact_pvs:
+            readback += linac_aact_pv.get()
         self.ui.machine_readback_label.setText(f"{readback:.2f} MV")
     
     def update_threadcount(self):

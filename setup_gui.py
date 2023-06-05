@@ -104,13 +104,7 @@ class SetupWorker(QRunnable):
                         self.cavity.turnOn()
                     
                     self.cavity.check_abort()
-                    
-                    if self.desAmp <= 10:
-                        self.cavity.walk_amp(self.desAmp, 0.5)
-                    
-                    else:
-                        self.cavity.walk_amp(10, 0.5)
-                        self.cavity.walk_amp(self.desAmp, 0.1)
+                    self.cavity.walk_amp(self.desAmp, 0.1)
                     
                     self.cavity.rfModeCtrlPV.put(RF_MODE_SELAP)
                     

@@ -61,7 +61,7 @@ class SetupWorker(QRunnable):
                 self.signals.status.emit(f"Turning off {self.cavity}")
                 self.cavity.turnOff()
                 self.cavity.ssa.turnOff()
-                self.signals.status.emit(f"RF and SSA off for {self.cavity}")
+                self.signals.finished.emit(f"RF and SSA off for {self.cavity}")
             
             else:
                 self.signals.status.emit(f"Resetting and turning on {self.cavity} SSA if not on already")
@@ -109,6 +109,9 @@ class SetupWorker(QRunnable):
                     self.cavity.rfModeCtrlPV.put(RF_MODE_SELAP)
                     
                     self.signals.finished.emit(f"{self.cavity} Ramped Up to {self.desAmp}MV")
+        
+        except scLinacUtils.CavityAbortError:
+            self.signals.error.emit(f"{self.cavity} successfully aborted")
         
         except (scLinacUtils.StepperError, scLinacUtils.DetuneError,
                 scLinacUtils.SSACalibrationError, PVInvalidError,
@@ -167,6 +170,8 @@ class GUICavity:
         self.aact_readback_label.alarmSensitiveBorder = True
         self.aact_readback_label.alarmSensitiveContent = True
         self.aact_readback_label.showUnits = True
+        self.aact_readback_label.precisionFromPV = False
+        self.aact_readback_label.precision = 2
         
         # Putting this here because it otherwise gets garbage collected (?!)
         self.spinbox: PyDMSpinbox = PyDMSpinbox(init_channel=self.prefix + "ADES")
@@ -174,6 +179,8 @@ class GUICavity:
         self.spinbox.alarmSensitiveBorder = True
         self.spinbox.showUnits = True
         self.spinbox.showStepExponent = False
+        self.aact_readback_label.precisionFromPV = False
+        self.spinbox.precision = 2
         
         self.status_label: QLabel = QLabel("Ready for Setup")
         self.status_label.setAlignment(Qt.AlignHCenter)

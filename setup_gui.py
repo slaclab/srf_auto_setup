@@ -4,12 +4,14 @@ from typing import Dict, List
 
 from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
 from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox,
-                             QHBoxLayout, QLabel, QMessageBox, QPushButton,
+                             QHBoxLayout, QLabel, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
 from epics.ca import withInitialContext
-from lcls_tools.common.pydm_tools.displayUtils import ERROR_STYLESHEET, STATUS_STYLESHEET, WorkerSignals
+from lcls_tools.common.pydm_tools.displayUtils import (ERROR_STYLESHEET,
+                                                       STATUS_STYLESHEET,
+                                                       WorkerSignals)
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
@@ -20,13 +22,24 @@ from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError,
                                                      RF_MODE_SELAP)
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMSpinbox
-from qtpy.QtCore import Slot
+
+
+class SetupSignals(WorkerSignals):
+    def __init__(self, status_label: QLabel, start_button: QPushButton):
+        super().__init__(status_label)
+        self.status.connect(partial(start_button.setEnabled, False))
+        
+        self.finished.connect(partial(start_button.setEnabled, True))
+        self.error.connect(partial(start_button.setEnabled, True))
 
 
 class OffWorker(QRunnable):
-    def __init__(self, cavity: Cavity, status_label: QLabel):
+    def __init__(self, cavity: Cavity, status_label: QLabel,
+                 start_button: QPushButton):
         super().__init__()
-        self.signals = WorkerSignals(status_label)
+        self.setAutoDelete(False)
+        self.signals = SetupSignals(status_label=status_label,
+                                    start_button=start_button)
         self.cavity = cavity
     
     @withInitialContext
@@ -40,10 +53,12 @@ class OffWorker(QRunnable):
 
 class SetupWorker(QRunnable):
     def __init__(self, cavity: Cavity, status_label: QLabel,
-                 desAmp: float = 5,
+                 start_button: QPushButton, desAmp: float = 5,
                  ssa_cal=True, auto_tune=True, cav_char=True, rf_ramp=True):
         super().__init__()
-        self.signals = WorkerSignals(status_label)
+        self.setAutoDelete(False)
+        self.signals = SetupSignals(status_label=status_label,
+                                    start_button=start_button)
         self.cavity: Cavity = cavity
         self.desAmp = desAmp
         
@@ -51,8 +66,6 @@ class SetupWorker(QRunnable):
         self.auto_tune: bool = auto_tune
         self.cav_char: bool = cav_char
         self.rf_ramp: bool = rf_ramp
-        
-        self.signals.status.emit(f"{self.cavity} queued")
     
     @withInitialContext
     def run(self):
@@ -127,16 +140,6 @@ class SetupWorker(QRunnable):
             self.signals.error.emit(str(e))
 
 
-@Slot(str)
-def handle_error(message: str):
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Critical)
-    msg.setText("Error")
-    msg.setInformativeText(message)
-    msg.setWindowTitle("Error")
-    msg.exec_()
-
-
 @dataclasses.dataclass
 class Settings:
     ssa_cal_checkbox: QCheckBox
@@ -195,6 +198,13 @@ class GUICavity:
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]
         self.expert_screen_button.macros = self.cavity.edm_macro_string + (',' + "SELTAB=0,SELCHAR=3")
         self.expert_screen_button.setToolTip("EDM expert screens")
+        
+        self.setup_worker = SetupWorker(cavity=self.cavity,
+                                        status_label=self.status_label,
+                                        start_button=self.setup_button)
+        self.off_worker = OffWorker(cavity=self.cavity,
+                                    status_label=self.status_label,
+                                    start_button=self.turn_off_button)
     
     @property
     def ades_pv(self):
@@ -215,20 +225,18 @@ class GUICavity:
         return self._cavity
     
     def launch_off_worker(self):
-        off_worker = OffWorker(cavity=self.cavity,
-                               status_label=self.status_label)
-        self.parent.threadpool.start(off_worker)
+        self.parent.threadpool.start(self.off_worker)
         print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
     
     def launch_ramp_worker(self):
-        setup_worker = SetupWorker(cavity=self.cavity,
-                                   desAmp=self.ades_spinbox.value,
-                                   status_label=self.status_label,
-                                   ssa_cal=self.settings.ssa_cal_checkbox.isChecked(),
-                                   auto_tune=self.settings.auto_tune_checkbox.isChecked(),
-                                   cav_char=self.settings.cav_char_checkbox.isChecked(),
-                                   rf_ramp=self.settings.rf_ramp_checkbox.isChecked())
-        self.parent.threadpool.start(setup_worker)
+        
+        self.setup_worker.desAmp = self.ades_spinbox.value
+        self.setup_worker.ssa_cal = self.settings.ssa_cal_checkbox.isChecked()
+        self.setup_worker.auto_tune = self.settings.auto_tune_checkbox.isChecked()
+        self.setup_worker.cav_char = self.settings.cav_char_checkbox.isChecked()
+        self.setup_worker.rf_ramp = self.settings.rf_ramp_checkbox.isChecked()
+        
+        self.parent.threadpool.start(self.setup_worker)
         print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
 
 

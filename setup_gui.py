@@ -25,21 +25,26 @@ from pydm.widgets import PyDMLabel, PyDMSpinbox
 
 
 class SetupSignals(WorkerSignals):
-    def __init__(self, status_label: QLabel, start_button: QPushButton):
+    def __init__(self, status_label: QLabel, setup_button: QPushButton,
+                 off_button: QPushButton):
         super().__init__(status_label)
-        self.status.connect(partial(start_button.setEnabled, False))
+        self.status.connect(partial(setup_button.setEnabled, False))
+        self.finished.connect(partial(setup_button.setEnabled, True))
+        self.error.connect(partial(setup_button.setEnabled, True))
         
-        self.finished.connect(partial(start_button.setEnabled, True))
-        self.error.connect(partial(start_button.setEnabled, True))
+        self.status.connect(partial(off_button.setEnabled, False))
+        self.finished.connect(partial(off_button.setEnabled, True))
+        self.error.connect(partial(off_button.setEnabled, True))
 
 
 class OffWorker(QRunnable):
     def __init__(self, cavity: Cavity, status_label: QLabel,
-                 start_button: QPushButton):
+                 off_button: QPushButton, setup_button: QPushButton):
         super().__init__()
         self.setAutoDelete(False)
         self.signals = SetupSignals(status_label=status_label,
-                                    start_button=start_button)
+                                    off_button=off_button,
+                                    setup_button=setup_button)
         self.cavity = cavity
     
     @withInitialContext
@@ -53,12 +58,13 @@ class OffWorker(QRunnable):
 
 class SetupWorker(QRunnable):
     def __init__(self, cavity: Cavity, status_label: QLabel,
-                 start_button: QPushButton, desAmp: float = 5,
+                 setup_button: QPushButton, off_button: QPushButton, desAmp: float = 5,
                  ssa_cal=True, auto_tune=True, cav_char=True, rf_ramp=True):
         super().__init__()
         self.setAutoDelete(False)
         self.signals = SetupSignals(status_label=status_label,
-                                    start_button=start_button)
+                                    setup_button=setup_button,
+                                    off_button=off_button)
         self.cavity: Cavity = cavity
         self.desAmp = desAmp
         
@@ -201,10 +207,12 @@ class GUICavity:
         
         self.setup_worker = SetupWorker(cavity=self.cavity,
                                         status_label=self.status_label,
-                                        start_button=self.setup_button)
+                                        setup_button=self.setup_button,
+                                        off_button=self.turn_off_button)
         self.off_worker = OffWorker(cavity=self.cavity,
                                     status_label=self.status_label,
-                                    start_button=self.turn_off_button)
+                                    off_button=self.turn_off_button,
+                                    setup_button=self.setup_button)
     
     @property
     def ades_pv(self):

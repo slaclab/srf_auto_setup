@@ -1,4 +1,5 @@
 import dataclasses
+from functools import partial
 from typing import Dict, List
 
 from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
@@ -174,13 +175,17 @@ class GUICavity:
         self.aact_readback_label.precision = 2
         
         # Putting this here because it otherwise gets garbage collected (?!)
-        self.spinbox: PyDMSpinbox = PyDMSpinbox(init_channel=self.prefix + "ADES")
-        self.spinbox.alarmSensitiveContent = True
-        self.spinbox.alarmSensitiveBorder = True
-        self.spinbox.showUnits = True
-        self.spinbox.showStepExponent = False
-        self.aact_readback_label.precisionFromPV = False
-        self.spinbox.precision = 2
+        self.ades_spinbox: PyDMSpinbox = PyDMSpinbox(init_channel=self.prefix + "ADES")
+        self.ades_spinbox.ctrl_limit_changed = lambda *args: None
+        self.ades_spinbox.alarmSensitiveContent = True
+        self.ades_spinbox.alarmSensitiveBorder = True
+        self.ades_spinbox.showUnits = True
+        self.ades_spinbox.showStepExponent = False
+        self.ades_spinbox.precisionFromPV = False
+        self.ades_spinbox.precision = 2
+        self.ades_spinbox.setRange(0, 21)
+        self.ades_spinbox.update_format_string = partial(self.ades_spinbox.lineEdit().setToolTip,
+                                                         "Press enter to execute ADES change")
         
         self.status_label: QLabel = QLabel("Ready for Setup")
         self.status_label.setAlignment(Qt.AlignHCenter)
@@ -217,7 +222,7 @@ class GUICavity:
     
     def launch_ramp_worker(self):
         setup_worker = SetupWorker(cavity=self.cavity,
-                                   desAmp=self.spinbox.value,
+                                   desAmp=self.ades_spinbox.value,
                                    status_label=self.status_label,
                                    ssa_cal=self.settings.ssa_cal_checkbox.isChecked(),
                                    auto_tune=self.settings.auto_tune_checkbox.isChecked(),
@@ -345,7 +350,7 @@ class Linac:
             cav_desamp_hlayout: QHBoxLayout = QHBoxLayout()
             cav_desamp_hlayout.addStretch()
             cav_desamp_hlayout.addWidget(QLabel("Amplitude: "))
-            cav_desamp_hlayout.addWidget(cav_widgets.spinbox)
+            cav_desamp_hlayout.addWidget(cav_widgets.ades_spinbox)
             cav_desamp_hlayout.addWidget(cav_widgets.aact_readback_label)
             cav_desamp_hlayout.addStretch()
             

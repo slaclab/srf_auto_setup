@@ -14,12 +14,11 @@ from lcls_tools.common.pydm_tools.displayUtils import (ERROR_STYLESHEET,
                                                        WorkerSignals)
 from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
-from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity,
-                                                L1BHL, LINAC_TUPLES)
+from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity)
 from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError,
                                                      PIEZO_FEEDBACK_VALUE,
-                                                     RF_MODE_SELA,
-                                                     RF_MODE_SELAP)
+                                                     RF_MODE_SELA)
+from lcls_tools.superconducting.sc_linac_utils import L1BHL, LINAC_TUPLES
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMSpinbox
 
@@ -109,7 +108,7 @@ class SetupWorker(QRunnable):
                 if self.cav_char:
                     self.signals.status.emit(f"Running {self.cavity} Cavity Characterization")
                     self.cavity.characterize()
-                    self.cavity.calc_probe_q_pv.put(1)
+                    self.cavity.calc_probe_q_pv_obj.put(1)
                     self.signals.finished.emit(f"{self.cavity} Characterized")
                 
                 self.cavity.check_abort()
@@ -117,16 +116,16 @@ class SetupWorker(QRunnable):
                 if self.rf_ramp:
                     self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
                     self.cavity.piezo.feedback_mode_PV.put(PIEZO_FEEDBACK_VALUE)
-                    self.cavity.rfModeCtrlPV.put(RF_MODE_SELA)
+                    self.cavity.set_sela_mode()
                     
-                    if self.cavity.rfStatePV.get() == 0:
-                        self.cavity.selAmplitudeDesPV.put(min(5, self.desAmp))
+                    if not self.cavity.is_on:
+                        self.cavity.ades = min(5, self.desAmp)
                         self.cavity.turnOn()
                     
                     self.cavity.check_abort()
                     self.cavity.walk_amp(self.desAmp, 0.1)
                     
-                    self.cavity.rfModeCtrlPV.put(RF_MODE_SELAP)
+                    self.cavity.set_selap_mode()
                     
                     self.signals.finished.emit(f"{self.cavity} Ramped Up to {self.desAmp}MV")
         
@@ -213,12 +212,6 @@ class GUICavity:
                                     status_label=self.status_label,
                                     off_button=self.turn_off_button,
                                     setup_button=self.setup_button)
-    
-    @property
-    def ades_pv(self):
-        if not self._ades_pv:
-            self._ades_pv = PV(self.prefix + "ADES")
-        return self._ades_pv
     
     def kill_workers(self):
         self.status_label.setText(f"Sending abort request for CM{self.cm} cavity {self.number}")

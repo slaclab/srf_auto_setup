@@ -13,10 +13,8 @@ from lcls_tools.common.pydm_tools.displayUtils import (ERROR_STYLESHEET,
                                                        STATUS_STYLESHEET,
                                                        WorkerSignals)
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
-from lcls_tools.superconducting import scLinacUtils
+from lcls_tools.superconducting import sc_linac_utils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity)
-from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError)
-from lcls_tools.superconducting.sc_linac_utils import L1BHL, LINAC_TUPLES
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMSpinbox
 
@@ -127,17 +125,17 @@ class SetupWorker(QRunnable):
                     
                     self.signals.finished.emit(f"{self.cavity} Ramped Up to {self.desAmp}MV")
         
-        except scLinacUtils.CavityAbortError:
+        except sc_linac_utils.CavityAbortError:
             self.signals.error.emit(f"{self.cavity} successfully aborted")
         
-        except (scLinacUtils.StepperError, scLinacUtils.DetuneError,
-                scLinacUtils.SSACalibrationError, PVInvalidError,
-                scLinacUtils.QuenchError,
-                scLinacUtils.CavityQLoadedCalibrationError,
-                scLinacUtils.CavityScaleFactorCalibrationError,
-                scLinacUtils.SSAFaultError, scLinacUtils.CavityAbortError,
-                scLinacUtils.StepperAbortError, CavityHWModeError,
-                scLinacUtils.CavityFaultError) as e:
+        except (sc_linac_utils.StepperError, sc_linac_utils.DetuneError,
+                sc_linac_utils.SSACalibrationError, PVInvalidError,
+                sc_linac_utils.QuenchError,
+                sc_linac_utils.CavityQLoadedCalibrationError,
+                sc_linac_utils.CavityScaleFactorCalibrationError,
+                sc_linac_utils.SSAFaultError, sc_linac_utils.CavityAbortError,
+                sc_linac_utils.StepperAbortError, sc_linac_utils.CavityHWModeError,
+                sc_linac_utils.CavityFaultError) as e:
             self.cavity.abort_flag = False
             self.cavity.steppertuner.abort_flag = False
             self.signals.error.emit(str(e))
@@ -399,11 +397,11 @@ class SetupGUI(Display):
         self.linac_widgets: List[Linac] = []
         for linac_idx in range(0, 4):
             self.linac_widgets.append(Linac(f"L{linac_idx}B", linac_idx,
-                                            LINAC_TUPLES[linac_idx][1],
+                                            sc_linac_utils.LINAC_TUPLES[linac_idx][1],
                                             settings=self.settings,
                                             parent=self))
         
-        self.linac_widgets.insert(2, Linac("L1BHL", 1, L1BHL,
+        self.linac_widgets.insert(2, Linac("L1BHL", 1, sc_linac_utils.L1BHL,
                                            settings=self.settings, parent=self))
         
         self.linac_aact_pvs: List[PV] = [PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)]

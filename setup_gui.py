@@ -114,7 +114,8 @@ class SetupWorker(QRunnable):
                     self.cavity.piezo.set_to_feedback()
                     self.cavity.set_sela_mode()
                     
-                    if not self.cavity.is_on:
+                    if (not self.cavity.is_on
+                            or (self.cavity.is_on and self.cavity.rf_mode != sc_linac_utils.RF_MODE_SELAP)):
                         self.cavity.ades = min(5, self.desAmp)
                         self.cavity.turnOn()
                     

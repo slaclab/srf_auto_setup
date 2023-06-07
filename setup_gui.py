@@ -12,7 +12,7 @@ from epics.ca import withInitialContext
 from lcls_tools.common.pydm_tools.displayUtils import (ERROR_STYLESHEET,
                                                        STATUS_STYLESHEET,
                                                        WorkerSignals)
-from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
+from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity)
 from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError,

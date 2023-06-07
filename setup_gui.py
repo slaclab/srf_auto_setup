@@ -92,7 +92,7 @@ class SetupWorker(QRunnable):
                 if self.ssa_cal:
                     self.signals.status.emit(f"Running {self.cavity} SSA Calibration")
                     self.cavity.turnOff()
-                    self.cavity.ssa.calibrate(self.cavity.ssa.drivemax)
+                    self.cavity.ssa.calibrate(self.cavity.ssa.drive_max)
                     self.signals.finished.emit(f"{self.cavity} SSA Calibrated")
                 
                 self.cavity.check_abort()

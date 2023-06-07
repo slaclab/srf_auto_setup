@@ -16,8 +16,7 @@ from lcls_tools.common.pyepics_tools.pyepicsUtils import PV, PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity)
 from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError,
-                                                     PIEZO_FEEDBACK_VALUE,
-                                                     RF_MODE_SELA)
+                                                     PIEZO_FEEDBACK_VALUE)
 from lcls_tools.superconducting.sc_linac_utils import L1BHL, LINAC_TUPLES
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMSpinbox
@@ -51,7 +50,7 @@ class OffWorker(QRunnable):
         self.signals.status.emit("Turning RF off")
         self.cavity.turnOff()
         self.signals.status.emit("Turning SSA off")
-        self.cavity.ssa.turnOff()
+        self.cavity.ssa.turn_off()
         self.signals.finished.emit("RF and SSA off")
 
 
@@ -79,13 +78,13 @@ class SetupWorker(QRunnable):
             if not self.desAmp:
                 self.signals.status.emit(f"Turning off {self.cavity}")
                 self.cavity.turnOff()
-                self.cavity.ssa.turnOff()
+                self.cavity.ssa.turn_off()
                 self.signals.finished.emit(f"RF and SSA off for {self.cavity}")
             
             else:
                 self.signals.status.emit(f"Resetting and turning on {self.cavity} SSA if not on already")
                 self.cavity.ssa.reset()
-                self.cavity.ssa.turnOn()
+                self.cavity.ssa.turn_on()
                 
                 self.signals.status.emit(f"Resetting {self.cavity} interlocks")
                 self.cavity.reset_interlocks()
@@ -230,7 +229,6 @@ class GUICavity:
         print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
     
     def launch_ramp_worker(self):
-        
         self.setup_worker.desAmp = self.ades_spinbox.value
         self.setup_worker.ssa_cal = self.settings.ssa_cal_checkbox.isChecked()
         self.setup_worker.auto_tune = self.settings.auto_tune_checkbox.isChecked()

@@ -15,8 +15,7 @@ from lcls_tools.common.pydm_tools.displayUtils import (ERROR_STYLESHEET,
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
 from lcls_tools.superconducting import scLinacUtils
 from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity)
-from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError,
-                                                     PIEZO_FEEDBACK_VALUE)
+from lcls_tools.superconducting.scLinacUtils import (CavityHWModeError)
 from lcls_tools.superconducting.sc_linac_utils import L1BHL, LINAC_TUPLES
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMSpinbox
@@ -114,7 +113,7 @@ class SetupWorker(QRunnable):
                 
                 if self.rf_ramp:
                     self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
-                    self.cavity.piezo.feedback_mode_PV.put(PIEZO_FEEDBACK_VALUE)
+                    self.cavity.piezo.set_to_feedback()
                     self.cavity.set_sela_mode()
                     
                     if not self.cavity.is_on:

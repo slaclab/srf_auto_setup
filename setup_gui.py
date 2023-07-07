@@ -111,7 +111,7 @@ class SetupWorker(QRunnable):
                 
                 if self.rf_ramp:
                     self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
-                    self.cavity.piezo.set_to_feedback()
+                    self.cavity.piezo.enable_feedback()
                     
                     if (not self.cavity.is_on
                             or (self.cavity.is_on and self.cavity.rf_mode != sc_linac_utils.RF_MODE_SELAP)):

@@ -96,7 +96,7 @@ class SetupWorker(QRunnable):
                 
                 if self.auto_tune:
                     self.signals.status.emit(f"Tuning {self.cavity} to Resonance")
-                    self.cavity.move_to_resonance()
+                    self.cavity.move_to_resonance(use_sela=False)
                     self.signals.finished.emit(f"{self.cavity} Tuned to Resonance")
                 
                 self.cavity.check_abort()
@@ -111,16 +111,20 @@ class SetupWorker(QRunnable):
                 
                 if self.rf_ramp:
                     self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
-                    self.cavity.piezo.set_to_feedback()
-                    self.cavity.set_sela_mode()
+                    self.cavity.piezo.enable_feedback()
                     
                     if (not self.cavity.is_on
                             or (self.cavity.is_on and self.cavity.rf_mode != sc_linac_utils.RF_MODE_SELAP)):
                         self.cavity.ades = min(5, self.desAmp)
-                        self.cavity.turnOn()
+                    
+                    self.cavity.turn_on()
                     
                     self.cavity.check_abort()
+                    
+                    self.cavity.set_sela_mode()
                     self.cavity.walk_amp(self.desAmp, 0.1)
+                    
+                    self.cavity.move_to_resonance(use_sela=True)
                     
                     self.cavity.set_selap_mode()
                     

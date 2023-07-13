@@ -124,6 +124,7 @@ class SetupWorker(QRunnable):
                     self.cavity.set_sela_mode()
                     self.cavity.walk_amp(self.desAmp, 0.1)
                     
+                    self.signals.status.emit(f"Centering {self.cavity} piezo")
                     self.cavity.move_to_resonance(use_sela=True)
                     
                     self.cavity.set_selap_mode()

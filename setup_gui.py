@@ -79,8 +79,7 @@ class SetupWorker(QRunnable):
                 self.signals.finished.emit(f"RF and SSA off for {self.cavity}")
             
             else:
-                self.signals.status.emit(f"Resetting and turning on {self.cavity} SSA if not on already")
-                self.cavity.ssa.reset()
+                self.signals.status.emit(f"Turning on {self.cavity} SSA if not on already")
                 self.cavity.ssa.turn_on()
                 
                 self.signals.status.emit(f"Resetting {self.cavity} interlocks")

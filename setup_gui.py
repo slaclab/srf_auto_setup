@@ -14,9 +14,11 @@ from lcls_tools.common.pydm_tools.displayUtils import (ERROR_STYLESHEET,
                                                        WorkerSignals)
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
 from lcls_tools.superconducting import sc_linac_utils
-from lcls_tools.superconducting.scLinac import (CRYOMODULE_OBJECTS, Cavity)
+from lcls_tools.superconducting.scLinac import (Cavity)
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMSpinbox
+
+from setup_linac import SETUP_CRYOMODULES, SetupCavity
 
 
 class SetupSignals(WorkerSignals):
@@ -163,19 +165,19 @@ class GUICavity:
     parent: Display
     
     def __post_init__(self):
-        self._cavity = None
+        self._cavity: SetupCavity = None
         
         self._ades_pv: PV = None
         self.setup_button = QPushButton(f"Set Up")
         
         self.abort_button: QPushButton = QPushButton("Abort")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.kill_workers)
+        self.abort_button.clicked.connect(self.cavity.trigger_abort)
         
         self.turn_off_button: QPushButton = QPushButton(f"Turn Off")
-        self.turn_off_button.clicked.connect(self.launch_off_worker)
+        self.turn_off_button.clicked.connect(self.cavity.trigger_shut_down)
         
-        self.setup_button.clicked.connect(self.launch_ramp_worker)
+        self.setup_button.clicked.connect(self.cavity.trigger_setup)
         self.aact_readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
         self.aact_readback_label.alarmSensitiveBorder = True
         self.aact_readback_label.alarmSensitiveContent = True
@@ -204,15 +206,6 @@ class GUICavity:
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]
         self.expert_screen_button.macros = self.cavity.edm_macro_string + (',' + "SELTAB=0,SELCHAR=3")
         self.expert_screen_button.setToolTip("EDM expert screens")
-        
-        self.setup_worker = SetupWorker(cavity=self.cavity,
-                                        status_label=self.status_label,
-                                        setup_button=self.setup_button,
-                                        off_button=self.turn_off_button)
-        self.off_worker = OffWorker(cavity=self.cavity,
-                                    status_label=self.status_label,
-                                    off_button=self.turn_off_button,
-                                    setup_button=self.setup_button)
     
     def kill_workers(self):
         self.status_label.setText(f"Sending abort request for CM{self.cm} cavity {self.number}")
@@ -221,24 +214,16 @@ class GUICavity:
         self.cavity.steppertuner.abort_flag = True
     
     @property
-    def cavity(self) -> Cavity:
+    def cavity(self) -> SetupCavity:
         if not self._cavity:
-            self._cavity = CRYOMODULE_OBJECTS[self.cm].cavities[self.number]
+            self._cavity = SETUP_CRYOMODULES[self.cm].cavities[self.number]
         return self._cavity
     
     def launch_off_worker(self):
-        self.parent.threadpool.start(self.off_worker)
-        print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
+        self.cavity.trigger_shut_down()
     
     def launch_ramp_worker(self):
-        self.setup_worker.desAmp = self.ades_spinbox.value
-        self.setup_worker.ssa_cal = self.settings.ssa_cal_checkbox.isChecked()
-        self.setup_worker.auto_tune = self.settings.auto_tune_checkbox.isChecked()
-        self.setup_worker.cav_char = self.settings.cav_char_checkbox.isChecked()
-        self.setup_worker.rf_ramp = self.settings.rf_ramp_checkbox.isChecked()
-        
-        self.parent.threadpool.start(self.setup_worker)
-        print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
+        self.cavity.trigger_setup()
 
 
 @dataclasses.dataclass
@@ -258,12 +243,12 @@ class GUICryomodule:
         
         self.abort_button: QPushButton = QPushButton(f"Abort Action for CM{self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.kill_cavity_workers)
+        self.abort_button.clicked.connect(self.trigger_cavity_aborts)
         
         self.turn_off_button: QPushButton = QPushButton(f"Turn off CM{self.name}")
-        self.turn_off_button.clicked.connect(self.launch_turnoff_workers)
+        self.turn_off_button.clicked.connect(self.trigger_cavity_turnoffs)
         
-        self.setup_button.clicked.connect(self.launch_cavity_workers)
+        self.setup_button.clicked.connect(self.trigger_cavity_setups)
         self.gui_cavities: Dict[int, GUICavity] = {}
         
         for cav_num in range(1, 9):
@@ -274,17 +259,17 @@ class GUICryomodule:
                                    parent=self.parent)
             self.gui_cavities[cav_num] = gui_cavity
     
-    def launch_turnoff_workers(self):
+    def trigger_cavity_turnoffs(self):
         for cavity_widget in self.gui_cavities.values():
-            cavity_widget.launch_off_worker()
+            cavity_widget.cavity.trigger_shut_down()
     
-    def kill_cavity_workers(self):
+    def trigger_cavity_aborts(self):
         for cavity_widget in self.gui_cavities.values():
-            cavity_widget.kill_workers()
+            cavity_widget.cavity.trigger_abort()
     
-    def launch_cavity_workers(self):
+    def trigger_cavity_setups(self):
         for cavity_widget in self.gui_cavities.values():
-            cavity_widget.launch_ramp_worker()
+            cavity_widget.cavity.trigger_setup()
 
 
 @dataclasses.dataclass
@@ -318,11 +303,11 @@ class Linac:
     
     def kill_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():
-            gui_cm.kill_cavity_workers()
+            gui_cm.trigger_cavity_aborts()
     
     def launch_cm_workers(self):
         for gui_cm in self.gui_cryomodules.values():
-            gui_cm.launch_cavity_workers()
+            gui_cm.trigger_cavity_setups()
     
     def add_cm_tab(self, cm_name: str):
         page: QWidget = QWidget()

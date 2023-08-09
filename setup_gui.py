@@ -2,150 +2,20 @@ import dataclasses
 from functools import partial
 from typing import Dict, List
 
-from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
+from PyQt5.QtCore import QThreadPool, QTimer, Qt
 from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QPushButton,
                              QTabWidget, QVBoxLayout, QWidget)
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
-from epics.ca import withInitialContext
 from lcls_tools.common.pydm_tools.displayUtils import (ERROR_STYLESHEET,
-                                                       STATUS_STYLESHEET,
-                                                       WorkerSignals)
-from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
+                                                       STATUS_STYLESHEET)
+from lcls_tools.common.pyepics_tools.pyepics_utils import PV
 from lcls_tools.superconducting import sc_linac_utils
-from lcls_tools.superconducting.scLinac import (Cavity)
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMSpinbox
 
 from setup_linac import SETUP_CRYOMODULES, SetupCavity
-
-
-class SetupSignals(WorkerSignals):
-    def __init__(self, status_label: QLabel, setup_button: QPushButton,
-                 off_button: QPushButton):
-        super().__init__(status_label)
-        self.status.connect(partial(setup_button.setEnabled, False))
-        self.finished.connect(partial(setup_button.setEnabled, True))
-        self.error.connect(partial(setup_button.setEnabled, True))
-        
-        self.status.connect(partial(off_button.setEnabled, False))
-        self.finished.connect(partial(off_button.setEnabled, True))
-        self.error.connect(partial(off_button.setEnabled, True))
-
-
-class OffWorker(QRunnable):
-    def __init__(self, cavity: Cavity, status_label: QLabel,
-                 off_button: QPushButton, setup_button: QPushButton):
-        super().__init__()
-        self.setAutoDelete(False)
-        self.signals = SetupSignals(status_label=status_label,
-                                    off_button=off_button,
-                                    setup_button=setup_button)
-        self.cavity = cavity
-    
-    @withInitialContext
-    def run(self):
-        self.signals.status.emit("Turning RF off")
-        self.cavity.turnOff()
-        self.signals.status.emit("Turning SSA off")
-        self.cavity.ssa.turn_off()
-        self.signals.finished.emit("RF and SSA off")
-
-
-class SetupWorker(QRunnable):
-    def __init__(self, cavity: Cavity, status_label: QLabel,
-                 setup_button: QPushButton, off_button: QPushButton, desAmp: float = 5,
-                 ssa_cal=True, auto_tune=True, cav_char=True, rf_ramp=True):
-        super().__init__()
-        self.setAutoDelete(False)
-        self.signals = SetupSignals(status_label=status_label,
-                                    setup_button=setup_button,
-                                    off_button=off_button)
-        self.cavity: Cavity = cavity
-        self.desAmp = desAmp
-        
-        self.ssa_cal: bool = ssa_cal
-        self.auto_tune: bool = auto_tune
-        self.cav_char: bool = cav_char
-        self.rf_ramp: bool = rf_ramp
-    
-    @withInitialContext
-    def run(self):
-        try:
-            self.cavity.check_abort()
-            if not self.desAmp:
-                self.signals.status.emit(f"Turning off {self.cavity}")
-                self.cavity.turnOff()
-                self.cavity.ssa.turn_off()
-                self.signals.finished.emit(f"RF and SSA off for {self.cavity}")
-            
-            else:
-                self.signals.status.emit(f"Turning on {self.cavity} SSA if not on already")
-                self.cavity.ssa.turn_on()
-                
-                self.signals.status.emit(f"Resetting {self.cavity} interlocks")
-                self.cavity.reset_interlocks()
-                
-                if self.ssa_cal:
-                    self.signals.status.emit(f"Running {self.cavity} SSA Calibration")
-                    self.cavity.turnOff()
-                    self.cavity.ssa.calibrate(self.cavity.ssa.drive_max)
-                    self.signals.finished.emit(f"{self.cavity} SSA Calibrated")
-                
-                self.cavity.check_abort()
-                
-                if self.auto_tune:
-                    self.signals.status.emit(f"Tuning {self.cavity} to Resonance")
-                    self.cavity.move_to_resonance(use_sela=False)
-                    self.signals.finished.emit(f"{self.cavity} Tuned to Resonance")
-                
-                self.cavity.check_abort()
-                
-                if self.cav_char:
-                    self.signals.status.emit(f"Running {self.cavity} Cavity Characterization")
-                    self.cavity.characterize()
-                    self.cavity.calc_probe_q_pv_obj.put(1)
-                    self.signals.finished.emit(f"{self.cavity} Characterized")
-                
-                self.cavity.check_abort()
-                
-                if self.rf_ramp:
-                    self.signals.status.emit(f"Ramping {self.cavity} to {self.desAmp}")
-                    self.cavity.piezo.enable_feedback()
-                    
-                    if (not self.cavity.is_on
-                            or (self.cavity.is_on and self.cavity.rf_mode != sc_linac_utils.RF_MODE_SELAP)):
-                        self.cavity.ades = min(5, self.desAmp)
-                    
-                    self.cavity.turn_on()
-                    
-                    self.cavity.check_abort()
-                    
-                    self.cavity.set_sela_mode()
-                    self.cavity.walk_amp(self.desAmp, 0.1)
-                    
-                    self.signals.status.emit(f"Centering {self.cavity} piezo")
-                    self.cavity.move_to_resonance(use_sela=True)
-                    
-                    self.cavity.set_selap_mode()
-                    
-                    self.signals.finished.emit(f"{self.cavity} Ramped Up to {self.desAmp}MV")
-        
-        except sc_linac_utils.CavityAbortError:
-            self.signals.error.emit(f"{self.cavity} successfully aborted")
-        
-        except (sc_linac_utils.StepperError, sc_linac_utils.DetuneError,
-                sc_linac_utils.SSACalibrationError, PVInvalidError,
-                sc_linac_utils.QuenchError,
-                sc_linac_utils.CavityQLoadedCalibrationError,
-                sc_linac_utils.CavityScaleFactorCalibrationError,
-                sc_linac_utils.SSAFaultError, sc_linac_utils.CavityAbortError,
-                sc_linac_utils.StepperAbortError, sc_linac_utils.CavityHWModeError,
-                sc_linac_utils.CavityFaultError) as e:
-            self.cavity.abort_flag = False
-            self.cavity.steppertuner.abort_flag = False
-            self.signals.error.emit(str(e))
 
 
 @dataclasses.dataclass

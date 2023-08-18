@@ -11,7 +11,8 @@ class SetupCavity(Cavity):
     
     def __init__(self, cavityNum, rackObject, ssaClass=SSA,
                  stepperClass=StepperTuner, piezoClass=Piezo):
-        super().__init__(cavityNum, rackObject)
+        super().__init__(cavityNum, rackObject, ssaClass,
+                         stepperClass, piezoClass)
         
         # TODO populate these when they exist
         self.progress_pv: str = self.auto_pv_addr("")

@@ -102,6 +102,9 @@ class SetupWorker(QRunnable):
                 self.signals.finished.emit(f"RF and SSA off for {self.cavity}")
 
             else:
+                self.signals.status.emit("Turning cavity off")
+                self.cavity.turnOff()
+
                 self.signals.status.emit(
                     f"Turning on {self.cavity} SSA if not on already"
                 )

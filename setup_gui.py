@@ -1,6 +1,5 @@
 import dataclasses
-from functools import partial
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
 from PyQt5.QtWidgets import (
@@ -20,27 +19,15 @@ from epics.ca import withInitialContext
 from lcls_tools.common.pydm_tools.displayUtils import (
     ERROR_STYLESHEET,
     STATUS_STYLESHEET,
-    WorkerSignals,
 )
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
 from lcls_tools.superconducting import sc_linac_utils
-from lcls_tools.superconducting.scLinac import CRYOMODULE_OBJECTS, Cavity
+from lcls_tools.superconducting.scLinac import Cavity
 from pydm import Display
 from pydm.widgets import PyDMLabel
 
-
-class SetupSignals(WorkerSignals):
-    def __init__(
-        self, status_label: QLabel, setup_button: QPushButton, off_button: QPushButton
-    ):
-        super().__init__(status_label)
-        self.status.connect(partial(setup_button.setEnabled, False))
-        self.finished.connect(partial(setup_button.setEnabled, True))
-        self.error.connect(partial(setup_button.setEnabled, True))
-
-        self.status.connect(partial(off_button.setEnabled, False))
-        self.finished.connect(partial(off_button.setEnabled, True))
-        self.error.connect(partial(off_button.setEnabled, True))
+from gui_utils import SetupSignals
+from setup_linac import SetupCavity, SETUP_CRYOMODULES
 
 
 class OffWorker(QRunnable):
@@ -70,7 +57,7 @@ class OffWorker(QRunnable):
 class SetupWorker(QRunnable):
     def __init__(
         self,
-        cavity: Cavity,
+        cavity: SetupCavity,
         status_label: QLabel,
         setup_button: QPushButton,
         off_button: QPushButton,
@@ -84,7 +71,8 @@ class SetupWorker(QRunnable):
         self.signals = SetupSignals(
             status_label=status_label, setup_button=setup_button, off_button=off_button
         )
-        self.cavity: Cavity = cavity
+        self.cavity: SetupCavity = cavity
+        self.cavity.signals = self.signals
 
         self.ssa_cal: bool = ssa_cal
         self.auto_tune: bool = auto_tune
@@ -95,76 +83,16 @@ class SetupWorker(QRunnable):
     def run(self):
         try:
             self.cavity.check_abort()
-            if not self.cavity.acon:
-                self.signals.status.emit(f"Turning off {self.cavity}")
-                self.cavity.turnOff()
-                self.cavity.ssa.turn_off()
-                self.signals.finished.emit(f"RF and SSA off for {self.cavity}")
+            if not self.cavity.is_online:
+                self.cavity.shut_down()
 
             else:
-                self.signals.status.emit("Turning cavity off")
-                self.cavity.turnOff()
+                self.cavity.ssa_cal_requested = self.ssa_cal
+                self.cavity.auto_tune_requested = self.auto_tune
+                self.cavity.cav_char_requested = self.cav_char
+                self.cavity.rf_ramp_requested = self.rf_ramp
 
-                self.signals.status.emit(
-                    f"Turning on {self.cavity} SSA if not on already"
-                )
-                self.cavity.ssa.turn_on()
-
-                self.signals.status.emit(f"Resetting {self.cavity} interlocks")
-                self.cavity.reset_interlocks()
-
-                if self.ssa_cal:
-                    self.signals.status.emit(f"Running {self.cavity} SSA Calibration")
-                    self.cavity.turnOff()
-                    self.cavity.ssa.calibrate(self.cavity.ssa.drive_max)
-                    self.signals.finished.emit(f"{self.cavity} SSA Calibrated")
-
-                self.cavity.check_abort()
-
-                if self.auto_tune:
-                    self.signals.status.emit(f"Tuning {self.cavity} to Resonance")
-                    self.cavity.move_to_resonance(use_sela=False)
-                    self.signals.finished.emit(f"{self.cavity} Tuned to Resonance")
-
-                self.cavity.check_abort()
-
-                if self.cav_char:
-                    self.signals.status.emit(
-                        f"Running {self.cavity} Cavity Characterization"
-                    )
-                    self.cavity.characterize()
-                    self.cavity.calc_probe_q_pv_obj.put(1)
-                    self.signals.finished.emit(f"{self.cavity} Characterized")
-
-                self.cavity.check_abort()
-
-                if self.rf_ramp:
-                    self.signals.status.emit(
-                        f"Ramping {self.cavity} to {self.cavity.acon}"
-                    )
-                    self.cavity.piezo.enable_feedback()
-
-                    if not self.cavity.is_on or (
-                        self.cavity.is_on
-                        and self.cavity.rf_mode != sc_linac_utils.RF_MODE_SELAP
-                    ):
-                        self.cavity.ades = min(5, self.cavity.acon)
-
-                    self.cavity.turn_on()
-
-                    self.cavity.check_abort()
-
-                    self.cavity.set_sela_mode()
-                    self.cavity.walk_amp(self.cavity.acon, 0.1)
-
-                    self.signals.status.emit(f"Centering {self.cavity} piezo")
-                    self.cavity.move_to_resonance(use_sela=True)
-
-                    self.cavity.set_selap_mode()
-
-                    self.signals.finished.emit(
-                        f"{self.cavity} Ramped Up to {self.cavity.acon}MV"
-                    )
+                self.cavity.setup()
 
         except sc_linac_utils.CavityAbortError:
             self.signals.error.emit(f"{self.cavity} successfully aborted")
@@ -205,7 +133,7 @@ class GUICavity:
     parent: Display
 
     def __post_init__(self):
-        self._cavity = None
+        self._cavity: Optional[SetupCavity] = None
 
         self.setup_button = QPushButton(f"Set Up")
 
@@ -267,9 +195,9 @@ class GUICavity:
         self.cavity.steppertuner.abort_flag = True
 
     @property
-    def cavity(self) -> Cavity:
+    def cavity(self) -> SetupCavity:
         if not self._cavity:
-            self._cavity = CRYOMODULE_OBJECTS[self.cm].cavities[self.number]
+            self._cavity: SetupCavity = SETUP_CRYOMODULES[self.cm].cavities[self.number]
         return self._cavity
 
     def launch_off_worker(self):

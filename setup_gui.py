@@ -79,7 +79,7 @@ class SetupWorker(QRunnable):
         try:
             self.cavity.check_abort()
             if not self.cavity.is_online:
-                self.cavity.shut_down()
+                self.signals.status.emit(f"{self.cavity} not online, skipping")
 
             else:
                 self.cavity.ssa_cal_requested = self.ssa_cal

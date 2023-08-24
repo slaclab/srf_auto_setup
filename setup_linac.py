@@ -29,6 +29,8 @@ class SetupCavity(Cavity):
         self._cav_char_requested: bool = False
         self._rf_ramp_requested: bool = False
 
+        self.running: bool = False
+
     @property
     def signals(self):
         return self._signals
@@ -54,6 +56,11 @@ class SetupCavity(Cavity):
         print(message)
         if self.signals:
             self.signals.finished.emit(message)
+
+    # TODO use status PV when implemented
+    @property
+    def script_is_running(self) -> bool:
+        return self.running
 
     # TODO use PV when available
     @property
@@ -89,16 +96,20 @@ class SetupCavity(Cavity):
     def rf_ramp_requested(self, value: bool):
         self._rf_ramp_requested = value
 
-    def ades_to_acon(self):
+    def capture_acon(self):
         self.acon = self.ades
 
     def shut_down(self):
+        self.running = True
         self.status_message = f"Shutting {self} down"
         self.turnOff()
         self.ssa.turn_off()
         self.set_finished_message(f"{self} RF and SSA off")
+        self.running = False
 
     def setup(self):
+        self.running = True
+
         self.status_message = f"Turning {self} off"
         self.turnOff()
 
@@ -151,6 +162,8 @@ class SetupCavity(Cavity):
             self.set_selap_mode()
 
             self.set_finished_message(f"{self} Ramped Up to {self.acon} MV")
+
+        self.running = False
 
 
 SETUP_CRYOMODULES: CryoDict = CryoDict(cavityClass=SetupCavity)

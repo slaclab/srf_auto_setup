@@ -1,19 +1,28 @@
 import dataclasses
-from functools import partial
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from PyQt5.QtCore import QThreadPool, Qt
-from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox,
-                             QHBoxLayout, QLabel, QPushButton,
-                             QTabWidget, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (
+    QCheckBox,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
-from lcls_tools.common.pydm_tools.displayUtils import (ERROR_STYLESHEET,
-                                                       STATUS_STYLESHEET)
+from lcls_tools.common.pydm_tools.displayUtils import (
+    ERROR_STYLESHEET,
+    STATUS_STYLESHEET,
+)
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV
 from lcls_tools.superconducting import sc_linac_utils
 from pydm import Display
-from pydm.widgets import PyDMLabel, PyDMSpinbox
+from pydm.widgets import PyDMLabel
 
 from setup_linac import SETUP_CRYOMODULES, SetupCavity
 
@@ -35,18 +44,19 @@ class GUICavity:
     parent: Display
 
     def __post_init__(self):
-        self._cavity: SetupCavity = None
+        self._cavity: Optional[SetupCavity] = None
         self.setup_button = QPushButton(f"Set Up")
 
         self.abort_button: QPushButton = QPushButton("Abort")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.cavity.trigger_abort)
-
         self.turn_off_button: QPushButton = QPushButton(f"Turn Off")
         self.turn_off_button.clicked.connect(self.cavity.trigger_shut_down)
 
         self.setup_button.clicked.connect(self.cavity.trigger_setup)
-        self.aact_readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
+        self.aact_readback_label: PyDMLabel = PyDMLabel(
+            init_channel=self.prefix + "AACTMEAN"
+        )
         self.aact_readback_label.alarmSensitiveBorder = True
         self.aact_readback_label.alarmSensitiveContent = True
         self.aact_readback_label.showUnits = True
@@ -54,31 +64,29 @@ class GUICavity:
         self.aact_readback_label.precision = 2
 
         # Putting this here because it otherwise gets garbage collected (?!)
-        self.ades_spinbox: PyDMSpinbox = PyDMSpinbox(init_channel=self.prefix + "ADES")
-        self.ades_spinbox.ctrl_limit_changed = lambda *args: None
-        self.ades_spinbox.alarmSensitiveContent = True
-        self.ades_spinbox.alarmSensitiveBorder = True
-        self.ades_spinbox.showUnits = True
-        self.ades_spinbox.showStepExponent = False
-        self.ades_spinbox.precisionFromPV = False
-        self.ades_spinbox.precision = 2
-        self.ades_spinbox.setRange(0, 21)
-        self.ades_spinbox.update_format_string = partial(self.ades_spinbox.lineEdit().setToolTip,
-                                                         "Press enter to execute ADES change")
+        self.acon_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "ACON")
+        self.acon_label.alarmSensitiveContent = True
+        self.acon_label.alarmSensitiveBorder = True
+        self.acon_label.showUnits = True
+        self.acon_label.precisionFromPV = False
+        self.acon_label.precision = 2
 
         self.status_label: PyDMLabel = PyDMLabel(init_channel=self.cavity.status_msg_pv)
         self.status_label.setAlignment(Qt.AlignHCenter)
         self.status_label.setWordWrap(True)
         self.status_label.alarmSensitiveBorder = True
         self.status_label.alarmSensitiveContent = True
-
         self.expert_screen_button: PyDMEDMDisplayButton = PyDMEDMDisplayButton()
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]
-        self.expert_screen_button.macros = self.cavity.edm_macro_string + (',' + "SELTAB=0,SELCHAR=3")
+        self.expert_screen_button.macros = self.cavity.edm_macro_string + (
+            "," + "SELTAB=0,SELCHAR=3"
+        )
         self.expert_screen_button.setToolTip("EDM expert screens")
 
     def kill_workers(self):
-        self.status_label.setText(f"Sending abort request for CM{self.cm} cavity {self.number}")
+        self.status_label.setText(
+            f"Sending abort request for CM{self.cm} cavity {self.number}"
+        )
         self.status_label.setStyleSheet(STATUS_STYLESHEET)
         self.cavity.abort_flag = True
         self.cavity.steppertuner.abort_flag = True
@@ -104,8 +112,9 @@ class GUICryomodule:
     parent: Display
 
     def __post_init__(self):
-
-        self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
+        self.readback_label: PyDMLabel = PyDMLabel(
+            init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM"
+        )
         self.readback_label.alarmSensitiveBorder = True
         self.readback_label.alarmSensitiveContent = True
         self.readback_label.showUnits = True
@@ -114,7 +123,6 @@ class GUICryomodule:
         self.abort_button: QPushButton = QPushButton(f"Abort Action for CM{self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.trigger_cavity_aborts)
-
         self.turn_off_button: QPushButton = QPushButton(f"Turn off CM{self.name}")
         self.turn_off_button.clicked.connect(self.trigger_cavity_turnoffs)
 
@@ -122,11 +130,13 @@ class GUICryomodule:
         self.gui_cavities: Dict[int, GUICavity] = {}
 
         for cav_num in range(1, 9):
-            gui_cavity = GUICavity(cav_num,
-                                   f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
-                                   self.name,
-                                   settings=self.settings,
-                                   parent=self.parent)
+            gui_cavity = GUICavity(
+                cav_num,
+                f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
+                self.name,
+                settings=self.settings,
+                parent=self.parent,
+            )
             self.gui_cavities[cav_num] = gui_cavity
 
     def trigger_cavity_turnoffs(self):
@@ -157,9 +167,11 @@ class Linac:
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.kill_cm_workers)
-        self.aact_pv = (f"ACCL:L{self.idx}B:1:AACTMEANSUM"
-                        if self.name != "L1BHL"
-                        else "ACCL:L1B:1:HL_AACTMEANSUM")
+        self.aact_pv = (
+            f"ACCL:L{self.idx}B:1:AACTMEANSUM"
+            if self.name != "L1BHL"
+            else "ACCL:L1B:1:HL_AACTMEANSUM"
+        )
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
         self.readback_label.alarmSensitiveBorder = True
         self.readback_label.alarmSensitiveContent = True
@@ -185,9 +197,9 @@ class Linac:
         page.setLayout(vlayout)
         self.cm_tab_widget.addTab(page, f"CM{cm_name}")
 
-        gui_cryomodule = GUICryomodule(linac_idx=self.idx, name=cm_name,
-                                       settings=self.settings,
-                                       parent=self.parent)
+        gui_cryomodule = GUICryomodule(
+            linac_idx=self.idx, name=cm_name, settings=self.settings, parent=self.parent
+        )
         self.gui_cryomodules[cm_name] = gui_cryomodule
         hlayout: QHBoxLayout = QHBoxLayout()
         hlayout.addStretch()
@@ -211,13 +223,13 @@ class Linac:
             cav_vlayout: QVBoxLayout = QVBoxLayout()
             cav_groupbox.setLayout(cav_vlayout)
             cav_widgets = gui_cryomodule.gui_cavities[cav_num]
-            cav_desamp_hlayout: QHBoxLayout = QHBoxLayout()
-            cav_desamp_hlayout.addStretch()
-            cav_desamp_hlayout.addWidget(QLabel("Amplitude: "))
-            cav_desamp_hlayout.addWidget(cav_widgets.ades_spinbox)
-            cav_desamp_hlayout.addWidget(cav_widgets.aact_readback_label)
-            cav_desamp_hlayout.addStretch()
-
+            cav_amp_hlayout: QHBoxLayout = QHBoxLayout()
+            cav_amp_hlayout.addStretch()
+            cav_amp_hlayout.addWidget(QLabel("ACON: "))
+            cav_amp_hlayout.addWidget(cav_widgets.acon_label)
+            cav_amp_hlayout.addWidget(QLabel("AACT: "))
+            cav_amp_hlayout.addWidget(cav_widgets.aact_readback_label)
+            cav_amp_hlayout.addStretch()
             cav_button_hlayout: QHBoxLayout = QHBoxLayout()
             cav_button_hlayout.addStretch()
             cav_button_hlayout.addWidget(cav_widgets.setup_button)
@@ -226,40 +238,51 @@ class Linac:
             cav_button_hlayout.addWidget(cav_widgets.expert_screen_button)
             cav_button_hlayout.addStretch()
 
-            cav_vlayout.addLayout(cav_desamp_hlayout)
+            cav_vlayout.addLayout(cav_amp_hlayout)
             cav_vlayout.addLayout(cav_button_hlayout)
             cav_vlayout.addWidget(cav_widgets.status_label)
-            all_cav_layout.addWidget(cav_groupbox,
-                                     0 if cav_num in range(1, 5) else 1,
-                                     (cav_num - 1) % 4)
+            all_cav_layout.addWidget(
+                cav_groupbox, 0 if cav_num in range(1, 5) else 1, (cav_num - 1) % 4
+            )
 
 
 class SetupGUI(Display):
     def ui_filename(self):
-        return 'setup_gui.ui'
+        return "setup_gui.ui"
 
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)
         self.threadpool = QThreadPool()
         print(f"Max thread count: {self.threadpool.maxThreadCount()}")
 
-        self.settings = Settings(ssa_cal_checkbox=self.ui.ssa_cal_checkbox,
-                                 auto_tune_checkbox=self.ui.autotune_checkbox,
-                                 cav_char_checkbox=self.ui.cav_char_checkbox,
-                                 rf_ramp_checkbox=self.ui.rf_ramp_checkbox)
-
+        self.settings = Settings(
+            ssa_cal_checkbox=self.ui.ssa_cal_checkbox,
+            auto_tune_checkbox=self.ui.autotune_checkbox,
+            cav_char_checkbox=self.ui.cav_char_checkbox,
+            rf_ramp_checkbox=self.ui.rf_ramp_checkbox,
+        )
         self.linac_widgets: List[Linac] = []
         for linac_idx in range(0, 4):
-            self.linac_widgets.append(Linac(f"L{linac_idx}B", linac_idx,
-                                            sc_linac_utils.LINAC_TUPLES[linac_idx][1],
-                                            settings=self.settings,
-                                            parent=self))
+            self.linac_widgets.append(
+                Linac(
+                    f"L{linac_idx}B",
+                    linac_idx,
+                    sc_linac_utils.LINAC_TUPLES[linac_idx][1],
+                    settings=self.settings,
+                    parent=self,
+                )
+            )
 
-        self.linac_widgets.insert(2, Linac("L1BHL", 1, sc_linac_utils.L1BHL,
-                                           settings=self.settings, parent=self))
+        self.linac_widgets.insert(
+            2,
+            Linac(
+                "L1BHL", 1, sc_linac_utils.L1BHL, settings=self.settings, parent=self
+            ),
+        )
 
-        self.linac_aact_pvs: List[PV] = [PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)]
-
+        self.linac_aact_pvs: List[PV] = [
+            PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)
+        ]
         self.update_readback()
 
         linac_tab_widget: QTabWidget = self.ui.tabWidget_linac

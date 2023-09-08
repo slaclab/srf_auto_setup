@@ -1,7 +1,7 @@
 import dataclasses
 from typing import Dict, List, Optional
 
-from PyQt5.QtCore import QThreadPool, Qt
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QGridLayout,
@@ -188,7 +188,7 @@ class Linac:
 
     def __post_init__(self):
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
-        self.setup_button.clicked.connect(self.launch_cm_workers)
+        self.setup_button.clicked.connect(self.launch_cm_setup_workers)
 
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
@@ -219,7 +219,11 @@ class Linac:
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.abort()
 
-    def launch_cm_workers(self):
+    def launch_cm_shutdown_workers(self):
+        for gui_cm in self.gui_cryomodules.values():
+            gui_cm.launch_shutdown_workers()
+
+    def launch_cm_setup_workers(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.launch_setup_workers()
 
@@ -290,8 +294,11 @@ class SetupGUI(Display):
 
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)
-        self.threadpool = QThreadPool()
-        print(f"Max thread count: {self.threadpool.maxThreadCount()}")
+
+        self.ui.machine_abort_button.setStyleSheet(ERROR_STYLESHEET)
+        self.ui.machine_abort_button.clicked.connect(self.abort_machine)
+        self.ui.machine_setup_button.clicked.connect(self.setup_machine)
+        self.ui.machine_shutdown_button.clicked.connect(self.shutdown_machine)
 
         self.settings = Settings(
             ssa_cal_checkbox=self.ui.ssa_cal_checkbox,
@@ -349,3 +356,15 @@ class SetupGUI(Display):
         for linac_aact_pv in self.linac_aact_pvs:
             readback += linac_aact_pv.get()
         self.ui.machine_readback_label.setText(f"{readback:.2f} MV")
+
+    def setup_machine(self):
+        for linac in self.linac_widgets:
+            linac.launch_cm_setup_workers()
+
+    def shutdown_machine(self):
+        for linac in self.linac_widgets:
+            linac.launch_cm_shutdown_workers()
+
+    def abort_machine(self):
+        for linac in self.linac_widgets:
+            linac.kill_cm_workers()

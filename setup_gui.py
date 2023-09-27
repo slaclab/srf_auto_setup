@@ -188,11 +188,11 @@ class Linac:
 
     def __post_init__(self):
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
-        self.setup_button.clicked.connect(self.launch_cm_setup_workers)
+        self.setup_button.clicked.connect(self.setup_cryomodules)
 
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.kill_cm_workers)
+        self.abort_button.clicked.connect(self.abort_cm_processes)
 
         self.acon_button: QPushButton = QPushButton(f"Capture all {self.name} ACON")
         self.acon_button.clicked.connect(self.capture_acon)
@@ -215,15 +215,15 @@ class Linac:
         for cm_name in self.cryomodule_names:
             self.add_cm_tab(cm_name)
 
-    def kill_cm_workers(self):
+    def abort_cm_processes(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.abort()
 
-    def launch_cm_shutdown_workers(self):
+    def shutdown_cryomodules(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.launch_shutdown_workers()
 
-    def launch_cm_setup_workers(self):
+    def setup_cryomodules(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.launch_setup_workers()
 
@@ -359,12 +359,12 @@ class SetupGUI(Display):
 
     def setup_machine(self):
         for linac in self.linac_widgets:
-            linac.launch_cm_setup_workers()
+            linac.setup_cryomodules()
 
     def shutdown_machine(self):
         for linac in self.linac_widgets:
-            linac.launch_cm_shutdown_workers()
+            linac.shutdown_cryomodules()
 
     def abort_machine(self):
         for linac in self.linac_widgets:
-            linac.kill_cm_workers()
+            linac.abort_cm_processes()

@@ -16,11 +16,11 @@ from PyQt5.QtWidgets import (
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
 from epics.ca import withInitialContext
-from lcls_tools.common.pydm_tools.displayUtils import (
+from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
+from lcls_tools.common.frontend.display.util import (
     ERROR_STYLESHEET,
     STATUS_STYLESHEET,
 )
-from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
 from lcls_tools.superconducting import sc_linac_utils
 from pydm import Display
 from pydm.widgets import PyDMLabel

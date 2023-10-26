@@ -20,6 +20,7 @@ from lcls_tools.common.pydm_tools.displayUtils import (
 )
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV
 from lcls_tools.superconducting import sc_linac_utils
+from lcls_tools.superconducting.scLinac import Cryomodule
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from pydm.widgets.analog_indicator import PyDMAnalogIndicator
@@ -91,7 +92,7 @@ class GUICavity:
         self.expert_screen_button.setToolTip("EDM expert screens")
 
     def abort(self):
-        self.cavity.request_abort()
+        self.cavity.request_stop()
 
     @property
     def cavity(self) -> SetupCavity:
@@ -128,6 +129,8 @@ class GUICryomodule:
     parent: Display
 
     def __post_init__(self):
+        self._cryomodule: Optional[Cryomodule] = None
+
         self.readback_label: PyDMLabel = PyDMLabel(
             init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM"
         )
@@ -172,6 +175,12 @@ class GUICryomodule:
     def abort(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.abort()
+
+    @property
+    def cryomodule_object(self) -> Cryomodule:
+        if not self._cryomodule:
+            self._cryomodule: Cryomodule = SETUP_CRYOMODULES[self.name]
+        return self._cryomodule
 
     def launch_setup_workers(self):
         for cavity_widget in self.gui_cavities.values():

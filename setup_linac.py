@@ -5,41 +5,31 @@ from lcls_tools.superconducting import sc_linac_utils
 from lcls_tools.superconducting.scLinac import (
     Cavity,
     CryoDict,
+    Cryomodule,
+    Magnet,
     Piezo,
+    Rack,
     SSA,
     StepperTuner,
 )
+from lcls_tools.superconducting.sc_linac_utils import SCLinacObject
 
 STATUS_READY_VALUE = 0
 STATUS_RUNNING_VALUE = 1
 STATUS_ERROR_VALUE = 2
 
 
-class SetupCavity(Cavity):
+class AutoLinacObject(SCLinacObject):
     def auto_pv_addr(self, suffix: str):
-        return super().pv_addr("AUTO:" + suffix)
+        return self.pv_addr("AUTO:" + suffix)
 
-    def __init__(
-        self,
-        cavityNum,
-        rackObject,
-        ssaClass=SSA,
-        stepperClass=StepperTuner,
-        piezoClass=Piezo,
-    ):
-        super().__init__(cavityNum, rackObject)
+    def __init__(self):
 
-        self.progress_pv: str = self.auto_pv_addr("PROG")
-        self._progress_pv_obj: Optional[PV] = None
+        self.setup_stop_pv: str = self.auto_pv_addr("SETUPSTOP")
+        self._setup_stop_pv_obj: Optional[PV] = None
 
-        self.status_pv: str = self.auto_pv_addr("STATUS")
-        self._status_pv_obj: Optional[PV] = None
-
-        self.status_msg_pv: str = self.auto_pv_addr("MSG")
-        self._status_msg_pv_obj: Optional[PV] = None
-
-        self.abort_pv: str = self.auto_pv_addr("ABORT")
-        self._abort_pv_obj: Optional[PV] = None
+        self.off_stop_pv: str = self.auto_pv_addr("OFFSTOP")
+        self._off_stop_pv_obj: Optional[PV] = None
 
         self.shutoff_pv: str = self.auto_pv_addr("OFFSTRT")
         self._shutoff_pv_obj: Optional[PV] = None
@@ -58,6 +48,63 @@ class SetupCavity(Cavity):
 
         self.rf_ramp_requested_pv: str = self.auto_pv_addr("SETUP_RAMPREQ")
         self._rf_ramp_requested_pv_obj: Optional[PV] = None
+
+    @property
+    def start_pv_obj(self) -> PV:
+        if not self._start_pv_obj:
+            self._start_pv_obj = PV(self.start_pv)
+        return self._start_pv_obj
+
+    @property
+    def shutoff_pv_obj(self) -> PV:
+        if not self._shutoff_pv_obj:
+            self._shutoff_pv_obj = PV(self.shutoff_pv)
+        return self._shutoff_pv_obj
+
+    @property
+    def setup_stop_pv_obj(self):
+        if not self._setup_stop_pv_obj:
+            self._setup_stop_pv_obj = PV(self.setup_stop_pv)
+        return self._setup_stop_pv_obj
+
+    @property
+    def setup_stop_requested(self):
+        return bool(self.setup_stop_pv_obj.get())
+
+    def clear_setup_stop(self):
+        self.setup_stop_pv_obj.put(0)
+
+    def check_abort(self):
+        if self.setup_stop_requested:
+            self.clear_setup_stop()
+            raise sc_linac_utils.CavityAbortError(f"Abort requested for {self}")
+
+    def trigger_setup(self):
+        self.start_pv_obj.put(1)
+
+    def request_setup_stop(self):
+        self.setup_stop_pv_obj.put(1)
+
+
+class SetupCavity(Cavity, AutoLinacObject):
+    def __init__(
+        self,
+        cavityNum,
+        rackObject,
+        ssaClass=SSA,
+        stepperClass=StepperTuner,
+        piezoClass=Piezo,
+    ):
+        super().__init__(cavityNum, rackObject)
+
+        self.progress_pv: str = self.auto_pv_addr("PROG")
+        self._progress_pv_obj: Optional[PV] = None
+
+        self.status_pv: str = self.auto_pv_addr("STATUS")
+        self._status_pv_obj: Optional[PV] = None
+
+        self.status_msg_pv: str = self.auto_pv_addr("MSG")
+        self._status_msg_pv_obj: Optional[PV] = None
 
     def capture_acon(self):
         self.acon = self.ades
@@ -109,43 +156,10 @@ class SetupCavity(Cavity):
         print(message)
         self.status_msg_pv_obj.put(message)
 
-    @property
-    def start_pv_obj(self) -> PV:
-        if not self._start_pv_obj:
-            self._start_pv_obj = PV(self.start_pv)
-        return self._start_pv_obj
-
-    @property
-    def shutoff_pv_obj(self) -> PV:
-        if not self._shutoff_pv_obj:
-            self._shutoff_pv_obj = PV(self.shutoff_pv)
-        return self._shutoff_pv_obj
-
-    @property
-    def abort_pv_obj(self):
-        if not self._abort_pv_obj:
-            self._abort_pv_obj = PV(self.abort_pv)
-        return self._abort_pv_obj
-
-    @property
-    def abort_requested(self):
-        return bool(self.abort_pv_obj.get())
-
-    def clear_abort(self):
-        self.abort_pv_obj.put(0)
-
-    def check_abort(self):
-        if self.abort_requested:
-            self.clear_abort()
-            raise sc_linac_utils.CavityAbortError(f"Abort requested for {self}")
-
-    def trigger_setup(self):
-        self.start_pv_obj.put(1)
-
-    def request_abort(self):
+    def request_stop(self):
         if self.script_is_running:
-            self.status_message = f"Requesting abort for {self}"
-            self.abort_pv_obj.put(1)
+            self.status_message = f"Requesting stop for {self}"
+            self.setup_stop_pv_obj.put(1)
         else:
             self.status_message = f"{self} script not running, no abort needed"
 
@@ -223,6 +237,7 @@ class SetupCavity(Cavity):
     def rf_ramp_requested(self, value: bool):
         self.rf_ramp_requested_pv_obj.put(value)
 
+    # TODO add flag for knowing what level to check requests (cav vs cm vs linac vs global)
     def setup(self):
         try:
             if self.script_is_running:
@@ -313,8 +328,32 @@ class SetupCavity(Cavity):
             sc_linac_utils.CavityAbortError,
         ) as e:
             self.status = STATUS_ERROR_VALUE
-            self.clear_abort()
+            self.clear_setup_stop()
             self.status_message = str(e)
 
 
-SETUP_CRYOMODULES: CryoDict = CryoDict(cavityClass=SetupCavity)
+# TODO implement checkbox puts/reads
+class SetupCryomodule(Cryomodule, AutoLinacObject):
+    def __init__(
+        self,
+        cryo_name,
+        linac_object,
+        cavity_class=SetupCavity,
+        magnet_class=Magnet,
+        rack_class=Rack,
+        is_harmonic_linearizer=False,
+        ssa_class=SSA,
+        stepper_class=StepperTuner,
+        piezo_class=Piezo,
+    ):
+        super().__init__(
+            cryo_name,
+            linac_object,
+            cavity_class=SetupCavity,
+            is_harmonic_linearizer=is_harmonic_linearizer,
+        )
+
+
+SETUP_CRYOMODULES: CryoDict = CryoDict(
+    cavityClass=SetupCavity, cryomoduleClass=SetupCryomodule
+)

@@ -1,4 +1,3 @@
-from abc import ABC
 from typing import Optional
 
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
@@ -21,11 +20,13 @@ STATUS_RUNNING_VALUE = 1
 STATUS_ERROR_VALUE = 2
 
 
-class AutoLinacObject(SCLinacObject, ABC):
+class AutoLinacObject(SCLinacObject):
     def auto_pv_addr(self, suffix: str):
         return self.pv_addr("AUTO:" + suffix)
 
-    def __init__(self):
+    # There was a naming collision with __init__ in double inheritance
+    def init(self):
+        print(f"Running AutoLinacObject init for {self.pv_addr('')}")
         self.setup_stop_pv: str = self.auto_pv_addr("SETUPSTOP")
         self._setup_stop_pv_obj: Optional[PV] = None
 
@@ -155,6 +156,7 @@ class SetupCavity(Cavity, AutoLinacObject):
         piezoClass=Piezo,
     ):
         super().__init__(cavityNum, rackObject)
+        super().init()
 
         self.progress_pv: str = self.auto_pv_addr("PROG")
         self._progress_pv_obj: Optional[PV] = None
@@ -356,6 +358,7 @@ class SetupCryomodule(Cryomodule, AutoLinacObject):
             cavity_class=SetupCavity,
             is_harmonic_linearizer=is_harmonic_linearizer,
         )
+        super().init()
 
 
 class SetupLinac(Linac, AutoLinacObject):
@@ -369,15 +372,17 @@ class SetupLinac(Linac, AutoLinacObject):
         super().__init__(
             linac_name, beamline_vacuum_infixes, insulating_vacuum_cryomodules
         )
+        super().init()
 
 
-class SetupMachine(AutoLinacObject):
+class SetupMachine(AutoLinacObject, SCLinacObject):
     @property
     def pv_prefix(self):
         return "ACCL:SYS0:SC:"
 
     def __init__(self):
         super().__init__()
+        super().init()
 
 
 MACHINE = SetupMachine()

@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import Optional
 
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
@@ -11,6 +12,7 @@ from lcls_tools.superconducting.scLinac import (
     Rack,
     SSA,
     StepperTuner,
+    Linac,
 )
 from lcls_tools.superconducting.sc_linac_utils import SCLinacObject
 
@@ -19,12 +21,11 @@ STATUS_RUNNING_VALUE = 1
 STATUS_ERROR_VALUE = 2
 
 
-class AutoLinacObject(SCLinacObject):
+class AutoLinacObject(SCLinacObject, ABC):
     def auto_pv_addr(self, suffix: str):
         return self.pv_addr("AUTO:" + suffix)
 
     def __init__(self):
-
         self.setup_stop_pv: str = self.auto_pv_addr("SETUPSTOP")
         self._setup_stop_pv_obj: Optional[PV] = None
 
@@ -74,16 +75,74 @@ class AutoLinacObject(SCLinacObject):
     def clear_setup_stop(self):
         self.setup_stop_pv_obj.put(0)
 
-    def check_abort(self):
+    def check_stop(self):
         if self.setup_stop_requested:
-            self.clear_setup_stop()
             raise sc_linac_utils.CavityAbortError(f"Abort requested for {self}")
 
     def trigger_setup(self):
         self.start_pv_obj.put(1)
 
+    def trigger_shutdown(self):
+        self.shutoff_pv_obj.put(1)
+
     def request_setup_stop(self):
         self.setup_stop_pv_obj.put(1)
+
+    @property
+    def ssa_cal_requested_pv_obj(self):
+        if not self._ssa_cal_requested_pv_obj:
+            self._ssa_cal_requested_pv_obj = PV(self.ssa_cal_requested_pv)
+        return self._ssa_cal_requested_pv_obj
+
+    @property
+    def ssa_cal_requested(self):
+        return bool(self.ssa_cal_requested_pv_obj.get())
+
+    @ssa_cal_requested.setter
+    def ssa_cal_requested(self, value: bool):
+        self.ssa_cal_requested_pv_obj.put(value)
+
+    @property
+    def auto_tune_requested_pv_obj(self):
+        if not self._auto_tune_requested_pv_obj:
+            self._auto_tune_requested_pv_obj = PV(self.auto_tune_requested_pv)
+        return self._auto_tune_requested_pv_obj
+
+    @property
+    def auto_tune_requested(self):
+        return bool(self.auto_tune_requested_pv_obj.get())
+
+    @auto_tune_requested.setter
+    def auto_tune_requested(self, value: bool):
+        self.auto_tune_requested_pv_obj.put(value)
+
+    @property
+    def cav_char_requested_pv_obj(self):
+        if not self._cav_char_requested_pv_obj:
+            self._cav_char_requested_pv_obj = PV(self.cav_char_requested_pv)
+        return self._cav_char_requested_pv_obj
+
+    @property
+    def cav_char_requested(self):
+        return bool(self.cav_char_requested_pv_obj.get())
+
+    @cav_char_requested.setter
+    def cav_char_requested(self, value: bool):
+        self.cav_char_requested_pv_obj.put(value)
+
+    @property
+    def rf_ramp_requested_pv_obj(self):
+        if not self._rf_ramp_requested_pv_obj:
+            self._rf_ramp_requested_pv_obj = PV(self.rf_ramp_requested_pv)
+        return self._rf_ramp_requested_pv_obj
+
+    @property
+    def rf_ramp_requested(self):
+        return bool(self.rf_ramp_requested_pv_obj.get())
+
+    @rf_ramp_requested.setter
+    def rf_ramp_requested(self, value: bool):
+        self.rf_ramp_requested_pv_obj.put(value)
 
 
 class SetupCavity(Cavity, AutoLinacObject):
@@ -156,7 +215,13 @@ class SetupCavity(Cavity, AutoLinacObject):
         print(message)
         self.status_msg_pv_obj.put(message)
 
-    def request_stop(self):
+    def check_stops(self):
+        self.check_stop()
+        self.cryomodule.check_stop()
+        self.linac.check_stop()
+        MACHINE.check_stop()
+
+    def request_setup_stop(self):
         if self.script_is_running:
             self.status_message = f"Requesting stop for {self}"
             self.setup_stop_pv_obj.put(1)
@@ -178,66 +243,6 @@ class SetupCavity(Cavity, AutoLinacObject):
         self.progress = 100
         self.status = STATUS_READY_VALUE
 
-    def trigger_shut_down(self):
-        self.shutoff_pv_obj.put(1)
-
-    @property
-    def ssa_cal_requested_pv_obj(self):
-        if not self._ssa_cal_requested_pv_obj:
-            self._ssa_cal_requested_pv_obj = PV(self.ssa_cal_requested_pv)
-        return self._ssa_cal_requested_pv_obj
-
-    @property
-    def ssa_cal_requested(self):
-        return bool(self.ssa_cal_requested_pv_obj.get())
-
-    @ssa_cal_requested.setter
-    def ssa_cal_requested(self, value: bool):
-        self.ssa_cal_requested_pv_obj.put(value)
-
-    @property
-    def auto_tune_requested_pv_obj(self):
-        if not self._auto_tune_requested_pv_obj:
-            self._auto_tune_requested_pv_obj = PV(self.auto_tune_requested_pv)
-        return self._auto_tune_requested_pv_obj
-
-    @property
-    def auto_tune_requested(self):
-        return bool(self.auto_tune_requested_pv_obj.get())
-
-    @auto_tune_requested.setter
-    def auto_tune_requested(self, value: bool):
-        self.auto_tune_requested_pv_obj.put(value)
-
-    @property
-    def cav_char_requested_pv_obj(self):
-        if not self._cav_char_requested_pv_obj:
-            self._cav_char_requested_pv_obj = PV(self.cav_char_requested_pv)
-        return self._cav_char_requested_pv_obj
-
-    @property
-    def cav_char_requested(self):
-        return bool(self.cav_char_requested_pv_obj.get())
-
-    @cav_char_requested.setter
-    def cav_char_requested(self, value: bool):
-        self.cav_char_requested_pv_obj.put(value)
-
-    @property
-    def rf_ramp_requested_pv_obj(self):
-        if not self._rf_ramp_requested_pv_obj:
-            self._rf_ramp_requested_pv_obj = PV(self.rf_ramp_requested_pv)
-        return self._rf_ramp_requested_pv_obj
-
-    @property
-    def rf_ramp_requested(self):
-        return bool(self.rf_ramp_requested_pv_obj.get())
-
-    @rf_ramp_requested.setter
-    def rf_ramp_requested(self, value: bool):
-        self.rf_ramp_requested_pv_obj.put(value)
-
-    # TODO add flag for knowing what level to check requests (cav vs cm vs linac vs global)
     def setup(self):
         try:
             if self.script_is_running:
@@ -263,7 +268,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} SSA Calibrated"
 
             self.progress = 25
-            self.check_abort()
+            self.check_stops()
 
             if self.auto_tune_requested:
                 self.status_message = f"Tuning {self} to Resonance"
@@ -271,7 +276,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} Tuned to Resonance"
 
             self.progress = 50
-            self.check_abort()
+            self.check_stops()
 
             if self.cav_char_requested:
                 self.status_message = f"Running {self} Cavity Characterization"
@@ -282,7 +287,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} Characterized"
 
             self.progress = 75
-            self.check_abort()
+            self.check_stops()
 
             if self.rf_ramp_requested:
                 self.status_message = f"Ramping {self} to {self.acon}"
@@ -297,7 +302,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.turn_on()
                 self.progress = 85
 
-                self.check_abort()
+                self.check_stops()
 
                 self.set_sela_mode()
                 self.walk_amp(self.acon, 0.1)
@@ -332,7 +337,6 @@ class SetupCavity(Cavity, AutoLinacObject):
             self.status_message = str(e)
 
 
-# TODO implement checkbox puts/reads
 class SetupCryomodule(Cryomodule, AutoLinacObject):
     def __init__(
         self,
@@ -354,6 +358,30 @@ class SetupCryomodule(Cryomodule, AutoLinacObject):
         )
 
 
+class SetupLinac(Linac, AutoLinacObject):
+    @property
+    def pv_prefix(self):
+        return f"ACCL:{self.name}:1:"
+
+    def __init__(
+        self, linac_name, beamline_vacuum_infixes, insulating_vacuum_cryomodules
+    ):
+        super().__init__(
+            linac_name, beamline_vacuum_infixes, insulating_vacuum_cryomodules
+        )
+
+
+class SetupMachine(AutoLinacObject):
+    @property
+    def pv_prefix(self):
+        return "ACCL:SYS0:SC:"
+
+    def __init__(self):
+        super().__init__()
+
+
+MACHINE = SetupMachine()
+
 SETUP_CRYOMODULES: CryoDict = CryoDict(
-    cavityClass=SetupCavity, cryomoduleClass=SetupCryomodule
+    cavityClass=SetupCavity, cryomoduleClass=SetupCryomodule, linacClass=SetupLinac
 )

@@ -1,7 +1,7 @@
 import dataclasses
 from typing import Dict, List, Optional
 
-from PyQt5.QtCore import QThreadPool, Qt
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QGridLayout,
@@ -20,8 +20,11 @@ from lcls_tools.common.pydm_tools.displayUtils import (
 )
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV
 from lcls_tools.superconducting import sc_linac_utils
+from lcls_tools.superconducting.scLinac import Cryomodule
 from pydm import Display
 from pydm.widgets import PyDMLabel
+from pydm.widgets.analog_indicator import PyDMAnalogIndicator
+from pydm.widgets.display_format import DisplayFormat
 
 from setup_linac import SETUP_CRYOMODULES, SetupCavity
 
@@ -49,7 +52,6 @@ class GUICavity:
         self.abort_button: QPushButton = QPushButton("Abort")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.abort)
-
         self.shutdown_button: QPushButton = QPushButton(f"Turn Off")
         self.shutdown_button.clicked.connect(self.launch_shutdown_worker)
 
@@ -72,10 +74,16 @@ class GUICavity:
         self.acon_label.precision = 2
 
         self.status_label: PyDMLabel = PyDMLabel(init_channel=self.cavity.status_msg_pv)
+        self.status_label.displayFormat = DisplayFormat.String
         self.status_label.setAlignment(Qt.AlignHCenter)
         self.status_label.setWordWrap(True)
         self.status_label.alarmSensitiveBorder = True
         self.status_label.alarmSensitiveContent = True
+
+        self.progress_bar: PyDMAnalogIndicator = PyDMAnalogIndicator(
+            init_channel=self.cavity.progress_pv
+        )
+
         self.expert_screen_button: PyDMEDMDisplayButton = PyDMEDMDisplayButton()
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]
         self.expert_screen_button.macros = self.cavity.edm_macro_string + (
@@ -84,7 +92,7 @@ class GUICavity:
         self.expert_screen_button.setToolTip("EDM expert screens")
 
     def abort(self):
-        self.cavity.request_abort()
+        self.cavity.request_stop()
 
     @property
     def cavity(self) -> SetupCavity:
@@ -121,6 +129,8 @@ class GUICryomodule:
     parent: Display
 
     def __post_init__(self):
+        self._cryomodule: Optional[Cryomodule] = None
+
         self.readback_label: PyDMLabel = PyDMLabel(
             init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM"
         )
@@ -134,7 +144,6 @@ class GUICryomodule:
         self.abort_button: QPushButton = QPushButton(f"Abort Action for CM{self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.abort)
-
         self.turn_off_button: QPushButton = QPushButton(f"Turn off CM{self.name}")
         self.turn_off_button.clicked.connect(self.launch_shutdown_workers)
 
@@ -167,6 +176,12 @@ class GUICryomodule:
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.abort()
 
+    @property
+    def cryomodule_object(self) -> Cryomodule:
+        if not self._cryomodule:
+            self._cryomodule: Cryomodule = SETUP_CRYOMODULES[self.name]
+        return self._cryomodule
+
     def launch_setup_workers(self):
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.trigger_setup()
@@ -182,11 +197,11 @@ class Linac:
 
     def __post_init__(self):
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
-        self.setup_button.clicked.connect(self.launch_cm_workers)
+        self.setup_button.clicked.connect(self.setup_cryomodules)
 
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.kill_cm_workers)
+        self.abort_button.clicked.connect(self.abort_cm_processes)
 
         self.acon_button: QPushButton = QPushButton(f"Capture all {self.name} ACON")
         self.acon_button.clicked.connect(self.capture_acon)
@@ -209,11 +224,15 @@ class Linac:
         for cm_name in self.cryomodule_names:
             self.add_cm_tab(cm_name)
 
-    def kill_cm_workers(self):
+    def abort_cm_processes(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.abort()
 
-    def launch_cm_workers(self):
+    def shutdown_cryomodules(self):
+        for gui_cm in self.gui_cryomodules.values():
+            gui_cm.launch_shutdown_workers()
+
+    def setup_cryomodules(self):
         for gui_cm in self.gui_cryomodules.values():
             gui_cm.launch_setup_workers()
 
@@ -272,6 +291,7 @@ class Linac:
             cav_vlayout.addLayout(cav_amp_hlayout)
             cav_vlayout.addLayout(cav_button_hlayout)
             cav_vlayout.addWidget(cav_widgets.status_label)
+            cav_vlayout.addWidget(cav_widgets.progress_bar)
             all_cav_layout.addWidget(
                 cav_groupbox, 0 if cav_num in range(1, 5) else 1, (cav_num - 1) % 4
             )
@@ -283,8 +303,11 @@ class SetupGUI(Display):
 
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)
-        self.threadpool = QThreadPool()
-        print(f"Max thread count: {self.threadpool.maxThreadCount()}")
+
+        self.ui.machine_abort_button.setStyleSheet(ERROR_STYLESHEET)
+        self.ui.machine_abort_button.clicked.connect(self.abort_machine)
+        self.ui.machine_setup_button.clicked.connect(self.setup_machine)
+        self.ui.machine_shutdown_button.clicked.connect(self.shutdown_machine)
 
         self.settings = Settings(
             ssa_cal_checkbox=self.ui.ssa_cal_checkbox,
@@ -328,7 +351,7 @@ class SetupGUI(Display):
             hlayout.addStretch()
             hlayout.addWidget(QLabel(f"{linac.name} Amplitude:"))
             hlayout.addWidget(linac.readback_label)
-            # hlayout.addWidget(linac.setup_button)
+            hlayout.addWidget(linac.setup_button)
             hlayout.addWidget(linac.abort_button)
             hlayout.addWidget(linac.acon_button)
             hlayout.addStretch()
@@ -342,3 +365,15 @@ class SetupGUI(Display):
         for linac_aact_pv in self.linac_aact_pvs:
             readback += linac_aact_pv.get()
         self.ui.machine_readback_label.setText(f"{readback:.2f} MV")
+
+    def setup_machine(self):
+        for linac in self.linac_widgets:
+            linac.setup_cryomodules()
+
+    def shutdown_machine(self):
+        for linac in self.linac_widgets:
+            linac.shutdown_cryomodules()
+
+    def abort_machine(self):
+        for linac in self.linac_widgets:
+            linac.abort_cm_processes()

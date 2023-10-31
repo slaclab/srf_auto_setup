@@ -25,7 +25,7 @@ class AutoLinacObject(SCLinacObject):
         return self.pv_addr("AUTO:" + suffix)
 
     # There was a naming collision with __init__ in double inheritance
-    def init(self):
+    def __init__(self):
         print(f"Running AutoLinacObject init for {self.pv_addr('')}")
         self.setup_stop_pv: str = self.auto_pv_addr("SETUPSTOP")
         self._setup_stop_pv_obj: Optional[PV] = None
@@ -155,8 +155,8 @@ class SetupCavity(Cavity, AutoLinacObject):
         stepperClass=StepperTuner,
         piezoClass=Piezo,
     ):
-        super().__init__(cavityNum, rackObject)
-        super().init()
+        Cavity.__init__(self, cavityNum=cavityNum, rackObject=rackObject)
+        AutoLinacObject.__init__(self)
 
         self.progress_pv: str = self.auto_pv_addr("PROG")
         self._progress_pv_obj: Optional[PV] = None
@@ -352,13 +352,14 @@ class SetupCryomodule(Cryomodule, AutoLinacObject):
         stepper_class=StepperTuner,
         piezo_class=Piezo,
     ):
-        super().__init__(
-            cryo_name,
-            linac_object,
+        Cryomodule.__init__(
+            self,
+            cryo_name=cryo_name,
+            linac_object=linac_object,
             cavity_class=SetupCavity,
             is_harmonic_linearizer=is_harmonic_linearizer,
         )
-        super().init()
+        AutoLinacObject.__init__(self)
 
 
 class SetupLinac(Linac, AutoLinacObject):
@@ -369,10 +370,13 @@ class SetupLinac(Linac, AutoLinacObject):
     def __init__(
         self, linac_name, beamline_vacuum_infixes, insulating_vacuum_cryomodules
     ):
-        super().__init__(
-            linac_name, beamline_vacuum_infixes, insulating_vacuum_cryomodules
+        Linac.__init__(
+            self,
+            linac_name=linac_name,
+            beamline_vacuum_infixes=beamline_vacuum_infixes,
+            insulating_vacuum_cryomodules=insulating_vacuum_cryomodules,
         )
-        super().init()
+        AutoLinacObject.__init__(self)
 
 
 class SetupMachine(AutoLinacObject, SCLinacObject):
@@ -381,8 +385,8 @@ class SetupMachine(AutoLinacObject, SCLinacObject):
         return "ACCL:SYS0:SC:"
 
     def __init__(self):
-        super().__init__()
-        super().init()
+        SCLinacObject.__init__(self)
+        AutoLinacObject.__init__(self)
 
 
 MACHINE = SetupMachine()

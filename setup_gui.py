@@ -79,7 +79,11 @@ class GUICavity:
         self.acon_label.precision = 2
 
         self.status_label: PyDMLabel = PyDMLabel(init_channel=self.cavity.status_msg_pv)
+
+        # status_msg_pv is an ndarray of char codes and seeing the display format
+        # makes is display correctly (i.e. not as [ 1 2 3 4]
         self.status_label.displayFormat = DisplayFormat.String
+
         self.status_label.setAlignment(Qt.AlignHCenter)
         self.status_label.setWordWrap(True)
         self.status_label.alarmSensitiveBorder = True

@@ -1,5 +1,6 @@
 from typing import Optional
 
+from epics.ca import CASeverityException
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
 from lcls_tools.superconducting import sc_linac_utils
 from lcls_tools.superconducting.scLinac import (
@@ -333,6 +334,7 @@ class SetupCavity(Cavity, AutoLinacObject):
             sc_linac_utils.CavityHWModeError,
             sc_linac_utils.CavityFaultError,
             sc_linac_utils.CavityAbortError,
+            CASeverityException,
         ) as e:
             self.status = STATUS_ERROR_VALUE
             self.clear_setup_stop()

@@ -92,6 +92,7 @@ class GUICavity:
         self.progress_bar: PyDMAnalogIndicator = PyDMAnalogIndicator(
             init_channel=self.cavity.progress_pv
         )
+        self.progress_bar.backgroundSizeRate = 0.2
 
         self.expert_screen_button: PyDMEDMDisplayButton = PyDMEDMDisplayButton()
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]

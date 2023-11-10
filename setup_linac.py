@@ -14,7 +14,7 @@ from lcls_tools.superconducting.scLinac import (
     StepperTuner,
     Linac,
 )
-from lcls_tools.superconducting.sc_linac_utils import SCLinacObject
+from lcls_tools.superconducting.sc_linac_utils import SCLinacObject, ALL_CRYOMODULES
 
 STATUS_READY_VALUE = 0
 STATUS_RUNNING_VALUE = 1
@@ -74,11 +74,7 @@ class AutoLinacObject(SCLinacObject):
         return bool(self.abort_pv_obj.get())
 
     def clear_abort(self):
-        self.abort_pv_obj.put(0)
-
-    def check_stop(self):
-        if self.abort_requested:
-            raise sc_linac_utils.CavityAbortError(f"Abort requested for {self}")
+        raise NotImplementedError
 
     def trigger_setup(self):
         self.start_pv_obj.put(1)
@@ -217,11 +213,8 @@ class SetupCavity(Cavity, AutoLinacObject):
         print(message)
         self.status_msg_pv_obj.put(message)
 
-    def check_stops(self):
-        self.check_stop()
-        self.cryomodule.check_stop()
-        self.linac.check_stop()
-        MACHINE.check_stop()
+    def clear_abort(self):
+        self.abort_pv_obj.put(0)
 
     def request_abort(self):
         if self.script_is_running:
@@ -230,20 +223,30 @@ class SetupCavity(Cavity, AutoLinacObject):
         else:
             self.status_message = f"{self} script not running, no abort needed"
 
+    def check_setup_abort(self):
+        if self.abort_requested:
+            self.clear_abort()
+            raise sc_linac_utils.CavityAbortError(f"Abort requested for {self}")
+
     def shut_down(self):
         if self.script_is_running:
             self.status_message = f"{self} script already running"
             return
 
-        self.status = STATUS_RUNNING_VALUE
-        self.progress = 0
-        self.status_message = f"Turning {self} RF off"
-        self.turnOff()
-        self.progress = 50
-        self.status_message = f"Turning {self} SSA off"
-        self.ssa.turn_off()
-        self.progress = 100
-        self.status = STATUS_READY_VALUE
+        try:
+            self.status = STATUS_RUNNING_VALUE
+            self.progress = 0
+            self.status_message = f"Turning {self} RF off"
+            self.turnOff()
+            self.progress = 50
+            self.status_message = f"Turning {self} SSA off"
+            self.ssa.turn_off()
+            self.progress = 100
+            self.status = STATUS_READY_VALUE
+        except (CASeverityException, sc_linac_utils.CavityAbortError) as e:
+            self.status = STATUS_ERROR_VALUE
+            self.clear_abort()
+            self.status_message = str(e)
 
     def setup(self):
         try:
@@ -270,7 +273,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} SSA Calibrated"
 
             self.progress = 25
-            self.check_stops()
+            self.check_setup_abort()
 
             if self.auto_tune_requested:
                 self.status_message = f"Tuning {self} to Resonance"
@@ -278,7 +281,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} Tuned to Resonance"
 
             self.progress = 50
-            self.check_stops()
+            self.check_setup_abort()
 
             if self.cav_char_requested:
                 self.status_message = f"Running {self} Cavity Characterization"
@@ -289,7 +292,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} Characterized"
 
             self.progress = 75
-            self.check_stops()
+            self.check_setup_abort()
 
             if self.rf_ramp_requested:
                 self.status_message = f"Ramping {self} to {self.acon}"
@@ -304,7 +307,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.turn_on()
                 self.progress = 85
 
-                self.check_stops()
+                self.check_setup_abort()
 
                 self.set_sela_mode()
                 self.walk_amp(self.acon, 0.1)
@@ -362,6 +365,10 @@ class SetupCryomodule(Cryomodule, AutoLinacObject):
         )
         AutoLinacObject.__init__(self)
 
+    def clear_abort(self):
+        for cavity in self.cavities.values():
+            cavity.clear_abort()
+
 
 class SetupLinac(Linac, AutoLinacObject):
     @property
@@ -379,6 +386,10 @@ class SetupLinac(Linac, AutoLinacObject):
         )
         AutoLinacObject.__init__(self)
 
+    def clear_abort(self):
+        for cm_obj in self.cryomodules.values():
+            cm_obj.clear_abort()
+
 
 class SetupMachine(AutoLinacObject, SCLinacObject):
     @property
@@ -388,6 +399,11 @@ class SetupMachine(AutoLinacObject, SCLinacObject):
     def __init__(self):
         SCLinacObject.__init__(self)
         AutoLinacObject.__init__(self)
+
+    def clear_abort(self):
+        for cm_name in ALL_CRYOMODULES:
+            cm_obj: SetupCryomodule = SETUP_CRYOMODULES[cm_name]
+            cm_obj.clear_abort()
 
 
 MACHINE = SetupMachine()

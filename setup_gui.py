@@ -101,7 +101,7 @@ class GUICavity:
         self.expert_screen_button.setToolTip("EDM expert screens")
 
     def request_stop(self):
-        self.cavity.request_setup_stop()
+        self.cavity.request_abort()
 
     @property
     def cavity(self) -> SetupCavity:
@@ -181,7 +181,7 @@ class GUICryomodule:
         self.cryomodule_object.trigger_shutdown()
 
     def request_stop(self):
-        self.cryomodule_object.request_setup_stop()
+        self.cryomodule_object.request_abort()
 
     @property
     def cryomodule_object(self) -> SetupCryomodule:
@@ -256,7 +256,7 @@ class Linac:
         return self._linac_object
 
     def request_stop(self):
-        self.linac_object.request_setup_stop()
+        self.linac_object.request_abort()
 
     def trigger_shutdown(self):
         self.linac_object.trigger_shutdown()
@@ -404,4 +404,4 @@ class SetupGUI(Display):
 
     @staticmethod
     def request_stop():
-        MACHINE.request_setup_stop()
+        MACHINE.request_abort()

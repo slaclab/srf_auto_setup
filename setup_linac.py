@@ -27,8 +27,8 @@ class AutoLinacObject(SCLinacObject):
 
     # There was a naming collision with __init__ in double inheritance
     def __init__(self):
-        self.setup_stop_pv: str = self.auto_pv_addr("SETUPSTOP")
-        self._setup_stop_pv_obj: Optional[PV] = None
+        self.abort_pv: str = self.auto_pv_addr("ABORT")
+        self._abort_pv_obj: Optional[PV] = None
 
         self.off_stop_pv: str = self.auto_pv_addr("OFFSTOP")
         self._off_stop_pv_obj: Optional[PV] = None
@@ -64,20 +64,20 @@ class AutoLinacObject(SCLinacObject):
         return self._shutoff_pv_obj
 
     @property
-    def setup_stop_pv_obj(self):
-        if not self._setup_stop_pv_obj:
-            self._setup_stop_pv_obj = PV(self.setup_stop_pv)
-        return self._setup_stop_pv_obj
+    def abort_pv_obj(self):
+        if not self._abort_pv_obj:
+            self._abort_pv_obj = PV(self.abort_pv)
+        return self._abort_pv_obj
 
     @property
-    def setup_stop_requested(self):
-        return bool(self.setup_stop_pv_obj.get())
+    def abort_requested(self):
+        return bool(self.abort_pv_obj.get())
 
-    def clear_setup_stop(self):
-        self.setup_stop_pv_obj.put(0)
+    def clear_abort(self):
+        self.abort_pv_obj.put(0)
 
     def check_stop(self):
-        if self.setup_stop_requested:
+        if self.abort_requested:
             raise sc_linac_utils.CavityAbortError(f"Abort requested for {self}")
 
     def trigger_setup(self):
@@ -86,8 +86,8 @@ class AutoLinacObject(SCLinacObject):
     def trigger_shutdown(self):
         self.shutoff_pv_obj.put(1)
 
-    def request_setup_stop(self):
-        self.setup_stop_pv_obj.put(1)
+    def request_abort(self):
+        self.abort_pv_obj.put(1)
 
     @property
     def ssa_cal_requested_pv_obj(self):
@@ -223,10 +223,10 @@ class SetupCavity(Cavity, AutoLinacObject):
         self.linac.check_stop()
         MACHINE.check_stop()
 
-    def request_setup_stop(self):
+    def request_abort(self):
         if self.script_is_running:
             self.status_message = f"Requesting stop for {self}"
-            self.setup_stop_pv_obj.put(1)
+            self.abort_pv_obj.put(1)
         else:
             self.status_message = f"{self} script not running, no abort needed"
 
@@ -336,7 +336,7 @@ class SetupCavity(Cavity, AutoLinacObject):
             CASeverityException,
         ) as e:
             self.status = STATUS_ERROR_VALUE
-            self.clear_setup_stop()
+            self.clear_abort()
             self.status_message = str(e)
 
 

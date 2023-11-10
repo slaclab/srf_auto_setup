@@ -27,7 +27,6 @@ class AutoLinacObject(SCLinacObject):
 
     # There was a naming collision with __init__ in double inheritance
     def __init__(self):
-        print(f"Running AutoLinacObject init for {self.pv_addr('')}")
         self.setup_stop_pv: str = self.auto_pv_addr("SETUPSTOP")
         self._setup_stop_pv_obj: Optional[PV] = None
 

@@ -247,6 +247,7 @@ class SetupCavity(Cavity, AutoLinacObject):
             self.ssa.turn_off()
             self.progress = 100
             self.status = STATUS_READY_VALUE
+            self.status_message = f"{self} RF and SSA off"
         except (CASeverityException, sc_linac_utils.CavityAbortError) as e:
             self.status = STATUS_ERROR_VALUE
             self.clear_abort()

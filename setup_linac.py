@@ -14,7 +14,11 @@ from lcls_tools.superconducting.scLinac import (
     StepperTuner,
     Linac,
 )
-from lcls_tools.superconducting.sc_linac_utils import SCLinacObject, ALL_CRYOMODULES
+from lcls_tools.superconducting.sc_linac_utils import (
+    SCLinacObject,
+    ALL_CRYOMODULES,
+    LINAC_CM_DICT,
+)
 
 STATUS_READY_VALUE = 0
 STATUS_RUNNING_VALUE = 1
@@ -387,7 +391,8 @@ class SetupLinac(Linac, AutoLinacObject):
         AutoLinacObject.__init__(self)
 
     def clear_abort(self):
-        for cm_obj in self.cryomodules.values():
+        for cm_name in LINAC_CM_DICT[int(self.name[1])]:
+            cm_obj: SetupCryomodule = SETUP_CRYOMODULES[cm_name]
             cm_obj.clear_abort()
 
 

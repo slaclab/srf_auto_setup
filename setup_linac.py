@@ -7,17 +7,17 @@ from lcls_tools.superconducting.scLinac import (
     Cavity,
     CryoDict,
     Cryomodule,
+    Linac,
     Magnet,
     Piezo,
     Rack,
     SSA,
     StepperTuner,
-    Linac,
 )
 from lcls_tools.superconducting.sc_linac_utils import (
-    SCLinacObject,
     ALL_CRYOMODULES,
     LINAC_CM_DICT,
+    SCLinacObject,
 )
 
 STATUS_READY_VALUE = 0
@@ -29,7 +29,6 @@ class AutoLinacObject(SCLinacObject):
     def auto_pv_addr(self, suffix: str):
         return self.pv_addr("AUTO:" + suffix)
 
-    # There was a naming collision with __init__ in double inheritance
     def __init__(self):
         self.abort_pv: str = self.auto_pv_addr("ABORT")
         self._abort_pv_obj: Optional[PV] = None
@@ -237,6 +236,8 @@ class SetupCavity(Cavity, AutoLinacObject):
             self.status_message = f"{self} script already running"
             return
 
+        self.clear_abort()
+
         try:
             self.status = STATUS_RUNNING_VALUE
             self.progress = 0
@@ -258,6 +259,8 @@ class SetupCavity(Cavity, AutoLinacObject):
             if self.script_is_running:
                 self.status_message = f"{self} script already running"
                 return
+
+            self.clear_abort()
 
             self.status = STATUS_RUNNING_VALUE
             self.progress = 0

@@ -403,8 +403,11 @@ class SetupGUI(Display):
             readback += linac_aact_pv.get()
         self.ui.machine_readback_label.setText(f"{readback:.2f} MV")
 
-    @staticmethod
-    def trigger_setup():
+    def trigger_setup(self):
+        MACHINE.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
+        MACHINE.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
+        MACHINE.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
+        MACHINE.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
         MACHINE.trigger_setup()
 
     @staticmethod

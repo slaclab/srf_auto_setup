@@ -1,3 +1,4 @@
+from time import sleep
 from typing import Optional
 
 from epics.ca import CASeverityException
@@ -18,6 +19,7 @@ from lcls_tools.superconducting.sc_linac_utils import (
     ALL_CRYOMODULES,
     LINAC_CM_DICT,
     SCLinacObject,
+    RF_MODE_SELA,
 )
 
 STATUS_READY_VALUE = 0
@@ -318,6 +320,12 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.check_setup_abort()
 
                 self.set_sela_mode()
+
+                while self.rf_mode != RF_MODE_SELA:
+                    self.status_message = "Waiting for cavity to be in SELA"
+                    sleep(0.5)
+
+                # TODO check correct abort
                 self.walk_amp(self.acon, 0.1)
                 self.progress = 90
 

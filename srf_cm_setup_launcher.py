@@ -1,4 +1,5 @@
 import argparse
+from time import sleep
 
 from lcls_tools.superconducting.sc_linac_utils import ALL_CRYOMODULES
 
@@ -44,3 +45,4 @@ if __name__ == "__main__":
 
     for cavity in cm_object.cavities.values():
         setup_cavity(cavity)
+        sleep(0.1)

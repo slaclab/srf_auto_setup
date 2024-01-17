@@ -1,7 +1,7 @@
 from functools import partial
 
 from PyQt5.QtWidgets import QLabel, QPushButton
-from lcls_tools.common.pydm_tools.displayUtils import WorkerSignals
+from lcls_tools.common.frontend.display.util import WorkerSignals
 
 
 class SetupSignals(WorkerSignals):

@@ -2,7 +2,7 @@ from time import sleep
 from typing import Optional
 
 from epics.ca import CASeverityException
-from lcls_tools.common.pyepics_tools.pyepics_utils import PV, PVInvalidError
+from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 from lcls_tools.superconducting import sc_linac_utils
 from lcls_tools.superconducting.scLinac import (
     Cavity,

@@ -120,6 +120,9 @@ class GUICavity:
         if self.cavity.script_is_running:
             self.cavity.status_message = f"{self.cavity} script already running"
             return
+        elif not self.cavity.is_online:
+            self.cavity.status_message = f"{self.cavity} not online, skipping"
+            return
         else:
             self.cavity.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
             self.cavity.auto_tune_requested = (

@@ -1,4 +1,5 @@
 import argparse
+from time import sleep
 
 from lcls_tools.superconducting.sc_linac_utils import LINAC_CM_DICT
 
@@ -44,3 +45,4 @@ if __name__ == "__main__":
     for cm_name in LINAC_CM_DICT[linac_number]:
         cm_object: SetupCryomodule = SETUP_CRYOMODULES[cm_name]
         setup_cryomodule(cm_object)
+        sleep(0.5)

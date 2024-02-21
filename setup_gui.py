@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
 )
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
-from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
+from lcls_tools.common.controls.pyepics.utils import PV
 from lcls_tools.common.frontend.display.util import (
     ERROR_STYLESHEET,
 )
@@ -264,6 +264,14 @@ class Linac:
         self.linac_object.trigger_shutdown()
 
     def trigger_setup(self):
+        self.linac_object.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
+        self.linac_object.auto_tune_requested = (
+            self.settings.auto_tune_checkbox.isChecked()
+        )
+        self.linac_object.cav_char_requested = (
+            self.settings.cav_char_checkbox.isChecked()
+        )
+        self.linac_object.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
         self.linac_object.trigger_setup()
 
     def capture_acon(self):
@@ -396,8 +404,11 @@ class SetupGUI(Display):
             readback += linac_aact_pv.get()
         self.ui.machine_readback_label.setText(f"{readback:.2f} MV")
 
-    @staticmethod
-    def trigger_setup():
+    def trigger_setup(self):
+        MACHINE.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
+        MACHINE.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
+        MACHINE.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
+        MACHINE.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
         MACHINE.trigger_setup()
 
     @staticmethod

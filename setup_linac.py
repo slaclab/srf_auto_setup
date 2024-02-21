@@ -44,6 +44,9 @@ class AutoLinacObject(SCLinacObject):
         self.start_pv: str = self.auto_pv_addr("SETUPSTRT")
         self._start_pv_obj: Optional[PV] = None
 
+        self.stop_pv: str = self.auto_pv_addr("SETUPSTOP")
+        self._stop_pv_obj: Optional[PV] = None
+
         self.ssa_cal_requested_pv: str = self.auto_pv_addr("SETUP_SSAREQ")
         self._ssa_cal_requested_pv_obj: Optional[PV] = None
 
@@ -61,6 +64,12 @@ class AutoLinacObject(SCLinacObject):
         if not self._start_pv_obj:
             self._start_pv_obj = PV(self.start_pv)
         return self._start_pv_obj
+
+    @property
+    def stop_pv_obj(self) -> PV:
+        if not self._stop_pv_obj:
+            self._stop_pv_obj = PV(self.stop_pv)
+        return self._stop_pv_obj
 
     @property
     def shutoff_pv_obj(self) -> PV:
@@ -89,6 +98,9 @@ class AutoLinacObject(SCLinacObject):
 
     def request_abort(self):
         self.abort_pv_obj.put(1)
+
+    def kill_setup(self):
+        self.stop_pv_obj.put(1)
 
     @property
     def ssa_cal_requested_pv_obj(self):
@@ -228,7 +240,7 @@ class SetupCavity(Cavity, AutoLinacObject):
         else:
             self.status_message = f"{self} script not running, no abort needed"
 
-    def check_setup_abort(self):
+    def check_abort(self):
         if self.abort_requested:
             self.clear_abort()
             raise sc_linac_utils.CavityAbortError(f"Abort requested for {self}")
@@ -283,7 +295,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} SSA Calibrated"
 
             self.progress = 25
-            self.check_setup_abort()
+            self.check_abort()
 
             if self.auto_tune_requested:
                 self.status_message = f"Tuning {self} to Resonance"
@@ -291,7 +303,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} Tuned to Resonance"
 
             self.progress = 50
-            self.check_setup_abort()
+            self.check_abort()
 
             if self.cav_char_requested:
                 self.status_message = f"Running {self} Cavity Characterization"
@@ -302,7 +314,7 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} Characterized"
 
             self.progress = 75
-            self.check_setup_abort()
+            self.check_abort()
 
             if self.rf_ramp_requested:
                 self.status_message = f"Ramping {self} to {self.acon}"
@@ -317,15 +329,15 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.turn_on()
                 self.progress = 85
 
-                self.check_setup_abort()
+                self.check_abort()
 
                 self.set_sela_mode()
 
                 while self.rf_mode != RF_MODE_SELA:
+                    self.check_abort()
                     self.status_message = "Waiting for cavity to be in SELA"
                     sleep(0.5)
 
-                # TODO check correct abort
                 self.walk_amp(self.acon, 0.1)
                 self.progress = 90
 

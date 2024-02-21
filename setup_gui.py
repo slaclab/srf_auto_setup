@@ -15,7 +15,8 @@ from PyQt5.QtWidgets import (
 )
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
-from lcls_tools.common.pydm_tools.displayUtils import (
+from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
+from lcls_tools.common.frontend.display.util import (
     ERROR_STYLESHEET,
 )
 from lcls_tools.common.pyepics_tools.pyepics_utils import PV

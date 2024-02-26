@@ -274,6 +274,11 @@ class SetupCavity(Cavity, AutoLinacObject):
                 self.status_message = f"{self} script already running"
                 return
 
+            if not self.is_online:
+                self.status_message = f"{self} not online, not setting up"
+                self.status = STATUS_ERROR_VALUE
+                return
+
             self.clear_abort()
 
             self.status = STATUS_RUNNING_VALUE

@@ -1,7 +1,7 @@
 import dataclasses
 from typing import Dict, List, Optional
 
-from PyQt5.QtCore import QRunnable, QThreadPool, QTimer, Qt
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QGridLayout,
@@ -15,104 +15,21 @@ from PyQt5.QtWidgets import (
 )
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
-from epics.ca import withInitialContext
-from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
-from lcls_tools.common.frontend.display.util import (
-    ERROR_STYLESHEET,
-    STATUS_STYLESHEET,
-)
+from lcls_tools.common.controls.pyepics.utils import PV
+from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
 from lcls_tools.superconducting import sc_linac_utils
 from pydm import Display
 from pydm.widgets import PyDMLabel
+from pydm.widgets.analog_indicator import PyDMAnalogIndicator
+from pydm.widgets.display_format import DisplayFormat
 
-from gui_utils import SetupSignals
-from setup_linac import SetupCavity, SETUP_CRYOMODULES
-
-
-class ShutdownWorker(QRunnable):
-    def __init__(
-        self,
-        cavity: SetupCavity,
-        status_label: QLabel,
-        off_button: QPushButton,
-        setup_button: QPushButton,
-    ):
-        super().__init__()
-        self.setAutoDelete(False)
-        self.signals = SetupSignals(
-            status_label=status_label, off_button=off_button, setup_button=setup_button
-        )
-        self.cavity: SetupCavity = cavity
-
-    @withInitialContext
-    def run(self):
-        self.cavity.shut_down()
-
-
-class SetupWorker(QRunnable):
-    def __init__(
-        self,
-        cavity: SetupCavity,
-        status_label: QLabel,
-        setup_button: QPushButton,
-        off_button: QPushButton,
-        ssa_cal=True,
-        auto_tune=True,
-        cav_char=True,
-        rf_ramp=True,
-    ):
-        super().__init__()
-        self.setAutoDelete(False)
-        self.signals = SetupSignals(
-            status_label=status_label, setup_button=setup_button, off_button=off_button
-        )
-        self.cavity: SetupCavity = cavity
-        self.cavity.signals = self.signals
-
-        self.ssa_cal: bool = ssa_cal
-        self.auto_tune: bool = auto_tune
-        self.cav_char: bool = cav_char
-        self.rf_ramp: bool = rf_ramp
-
-    @withInitialContext
-    def run(self):
-        try:
-            self.cavity.check_abort()
-            if not self.cavity.is_online:
-                self.signals.status.emit(f"{self.cavity} not online, skipping")
-
-            else:
-                self.cavity.ssa_cal_requested = self.ssa_cal
-                self.cavity.auto_tune_requested = self.auto_tune
-                self.cavity.cav_char_requested = self.cav_char
-                self.cavity.rf_ramp_requested = self.rf_ramp
-
-                self.cavity.setup()
-
-        except sc_linac_utils.CavityAbortError:
-            self.signals.error.emit(f"{self.cavity} successfully aborted")
-            self.cavity.abort_flag = False
-            self.cavity.steppertuner.abort_flag = False
-            self.cavity.running = False
-
-        except (
-            sc_linac_utils.StepperError,
-            sc_linac_utils.DetuneError,
-            sc_linac_utils.SSACalibrationError,
-            PVInvalidError,
-            sc_linac_utils.QuenchError,
-            sc_linac_utils.CavityQLoadedCalibrationError,
-            sc_linac_utils.CavityScaleFactorCalibrationError,
-            sc_linac_utils.SSAFaultError,
-            sc_linac_utils.CavityAbortError,
-            sc_linac_utils.StepperAbortError,
-            sc_linac_utils.CavityHWModeError,
-            sc_linac_utils.CavityFaultError,
-        ) as e:
-            self.cavity.abort_flag = False
-            self.cavity.steppertuner.abort_flag = False
-            self.signals.error.emit(str(e))
-            self.cavity.running = False
+from setup_linac import (
+    SETUP_CRYOMODULES,
+    SetupCavity,
+    SetupCryomodule,
+    SetupLinac,
+    MACHINE,
+)
 
 
 @dataclasses.dataclass
@@ -133,17 +50,15 @@ class GUICavity:
 
     def __post_init__(self):
         self._cavity: Optional[SetupCavity] = None
-
         self.setup_button = QPushButton(f"Set Up")
 
         self.abort_button: QPushButton = QPushButton("Abort")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.abort)
+        self.abort_button.clicked.connect(self.request_stop)
+        self.shutdown_button: QPushButton = QPushButton(f"Turn Off")
+        self.shutdown_button.clicked.connect(self.trigger_shutdown)
 
-        self.turn_off_button: QPushButton = QPushButton(f"Turn Off")
-        self.turn_off_button.clicked.connect(self.launch_shutdown_worker)
-
-        self.setup_button.clicked.connect(self.launch_setup_worker)
+        self.setup_button.clicked.connect(self.trigger_setup)
         self.aact_readback_label: PyDMLabel = PyDMLabel(
             init_channel=self.prefix + "AACTMEAN"
         )
@@ -161,9 +76,21 @@ class GUICavity:
         self.acon_label.precisionFromPV = False
         self.acon_label.precision = 2
 
-        self.status_label: QLabel = QLabel("Ready for Setup")
+        self.status_label: PyDMLabel = PyDMLabel(init_channel=self.cavity.status_msg_pv)
+
+        # status_msg_pv is an ndarray of char codes and seeing the display format
+        # makes is display correctly (i.e. not as [ 1 2 3 4]
+        self.status_label.displayFormat = DisplayFormat.String
+
         self.status_label.setAlignment(Qt.AlignHCenter)
         self.status_label.setWordWrap(True)
+        self.status_label.alarmSensitiveBorder = True
+        self.status_label.alarmSensitiveContent = True
+
+        self.progress_bar: PyDMAnalogIndicator = PyDMAnalogIndicator(
+            init_channel=self.cavity.progress_pv
+        )
+        self.progress_bar.backgroundSizeRate = 0.2
 
         self.expert_screen_button: PyDMEDMDisplayButton = PyDMEDMDisplayButton()
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]
@@ -172,28 +99,8 @@ class GUICavity:
         )
         self.expert_screen_button.setToolTip("EDM expert screens")
 
-        self.setup_worker = SetupWorker(
-            cavity=self.cavity,
-            status_label=self.status_label,
-            setup_button=self.setup_button,
-            off_button=self.turn_off_button,
-        )
-        self.shutdown_worker = ShutdownWorker(
-            cavity=self.cavity,
-            status_label=self.status_label,
-            off_button=self.turn_off_button,
-            setup_button=self.setup_button,
-        )
-
-    def abort(self):
-        if self.cavity.script_is_running:
-            self.status_label.setText(f"Sending abort request for {self.cavity}")
-            self.cavity.abort_flag = True
-            self.cavity.steppertuner.abort_flag = True
-        else:
-            self.status_label.setText(f"{self.cavity} not running; no abort needed")
-
-        self.status_label.setStyleSheet(STATUS_STYLESHEET)
+    def request_stop(self):
+        self.cavity.request_abort()
 
     @property
     def cavity(self) -> SetupCavity:
@@ -201,18 +108,28 @@ class GUICavity:
             self._cavity: SetupCavity = SETUP_CRYOMODULES[self.cm].cavities[self.number]
         return self._cavity
 
-    def launch_shutdown_worker(self):
-        self.parent.threadpool.start(self.shutdown_worker)
-        print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
+    def trigger_shutdown(self):
+        if self.cavity.script_is_running:
+            self.cavity.status_message = f"{self.cavity} script already running"
+            return
+        self.cavity.trigger_shutdown()
 
-    def launch_setup_worker(self):
-        self.setup_worker.ssa_cal = self.settings.ssa_cal_checkbox.isChecked()
-        self.setup_worker.auto_tune = self.settings.auto_tune_checkbox.isChecked()
-        self.setup_worker.cav_char = self.settings.cav_char_checkbox.isChecked()
-        self.setup_worker.rf_ramp = self.settings.rf_ramp_checkbox.isChecked()
+    def trigger_setup(self):
+        if self.cavity.script_is_running:
+            self.cavity.status_message = f"{self.cavity} script already running"
+            return
+        elif not self.cavity.is_online:
+            self.cavity.status_message = f"{self.cavity} not online, skipping"
+            return
+        else:
+            self.cavity.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
+            self.cavity.auto_tune_requested = (
+                self.settings.auto_tune_checkbox.isChecked()
+            )
+            self.cavity.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
+            self.cavity.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
 
-        self.parent.threadpool.start(self.setup_worker)
-        print(f"Active thread count: {self.parent.threadpool.activeThreadCount()}")
+            self.cavity.trigger_setup()
 
 
 @dataclasses.dataclass
@@ -223,6 +140,8 @@ class GUICryomodule:
     parent: Display
 
     def __post_init__(self):
+        self._cryomodule: Optional[SetupCryomodule] = None
+
         self.readback_label: PyDMLabel = PyDMLabel(
             init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM"
         )
@@ -231,16 +150,17 @@ class GUICryomodule:
         self.readback_label.showUnits = True
 
         self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
-        self.setup_button.clicked.connect(self.launch_setup_workers)
+        self.setup_button.clicked.connect(self.trigger_setup)
 
         self.abort_button: QPushButton = QPushButton(f"Abort Action for CM{self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.abort)
-
+        self.abort_button.clicked.connect(self.request_stop)
         self.turn_off_button: QPushButton = QPushButton(f"Turn off CM{self.name}")
-        self.turn_off_button.clicked.connect(self.launch_shutdown_workers)
+        self.turn_off_button.clicked.connect(self.trigger_shutdown)
 
-        self.acon_button: QPushButton = QPushButton(f"Capture all CM{self.name} ACON")
+        self.acon_button: QPushButton = QPushButton(
+            f"Push all CM{self.name} ADES to ACON"
+        )
         self.acon_button.clicked.connect(self.capture_acon)
 
         self.gui_cavities: Dict[int, GUICavity] = {}
@@ -259,17 +179,33 @@ class GUICryomodule:
         for cavity_widget in self.gui_cavities.values():
             cavity_widget.cavity.capture_acon()
 
-    def launch_shutdown_workers(self):
-        for cavity_widget in self.gui_cavities.values():
-            cavity_widget.launch_shutdown_worker()
+    def trigger_shutdown(self):
+        self.cryomodule_object.trigger_shutdown()
 
-    def abort(self):
-        for cavity_widget in self.gui_cavities.values():
-            cavity_widget.abort()
+    def request_stop(self):
+        self.cryomodule_object.request_abort()
 
-    def launch_setup_workers(self):
-        for cavity_widget in self.gui_cavities.values():
-            cavity_widget.launch_setup_worker()
+    @property
+    def cryomodule_object(self) -> SetupCryomodule:
+        if not self._cryomodule:
+            self._cryomodule: SetupCryomodule = SETUP_CRYOMODULES[self.name]
+        return self._cryomodule
+
+    def trigger_setup(self):
+        self.cryomodule_object.ssa_cal_requested = (
+            self.settings.ssa_cal_checkbox.isChecked()
+        )
+        self.cryomodule_object.auto_tune_requested = (
+            self.settings.auto_tune_checkbox.isChecked()
+        )
+        self.cryomodule_object.cav_char_requested = (
+            self.settings.cav_char_checkbox.isChecked()
+        )
+        self.cryomodule_object.rf_ramp_requested = (
+            self.settings.rf_ramp_checkbox.isChecked()
+        )
+
+        self.cryomodule_object.trigger_setup()
 
 
 @dataclasses.dataclass
@@ -281,12 +217,14 @@ class Linac:
     parent: Display
 
     def __post_init__(self):
+        self._linac_object: Optional[SetupLinac] = None
+
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
-        self.setup_button.clicked.connect(self.launch_cm_workers)
+        self.setup_button.clicked.connect(self.trigger_setup)
 
         self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.kill_cm_workers)
+        self.abort_button.clicked.connect(self.request_stop)
 
         self.acon_button: QPushButton = QPushButton(f"Capture all {self.name} ACON")
         self.acon_button.clicked.connect(self.capture_acon)
@@ -309,13 +247,32 @@ class Linac:
         for cm_name in self.cryomodule_names:
             self.add_cm_tab(cm_name)
 
-    def kill_cm_workers(self):
-        for gui_cm in self.gui_cryomodules.values():
-            gui_cm.abort()
+    @property
+    def linac_object(self):
+        if not self._linac_object:
+            self._linac_object = SetupLinac(
+                linac_name=self.name,
+                beamline_vacuum_infixes=[],
+                insulating_vacuum_cryomodules=[],
+            )
+        return self._linac_object
 
-    def launch_cm_workers(self):
-        for gui_cm in self.gui_cryomodules.values():
-            gui_cm.launch_setup_workers()
+    def request_stop(self):
+        self.linac_object.request_abort()
+
+    def trigger_shutdown(self):
+        self.linac_object.trigger_shutdown()
+
+    def trigger_setup(self):
+        self.linac_object.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
+        self.linac_object.auto_tune_requested = (
+            self.settings.auto_tune_checkbox.isChecked()
+        )
+        self.linac_object.cav_char_requested = (
+            self.settings.cav_char_checkbox.isChecked()
+        )
+        self.linac_object.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
+        self.linac_object.trigger_setup()
 
     def capture_acon(self):
         for gui_cm in self.gui_cryomodules.values():
@@ -361,11 +318,10 @@ class Linac:
             cav_amp_hlayout.addWidget(QLabel("AACT: "))
             cav_amp_hlayout.addWidget(cav_widgets.aact_readback_label)
             cav_amp_hlayout.addStretch()
-
             cav_button_hlayout: QHBoxLayout = QHBoxLayout()
             cav_button_hlayout.addStretch()
             cav_button_hlayout.addWidget(cav_widgets.setup_button)
-            cav_button_hlayout.addWidget(cav_widgets.turn_off_button)
+            cav_button_hlayout.addWidget(cav_widgets.shutdown_button)
             cav_button_hlayout.addWidget(cav_widgets.abort_button)
             cav_button_hlayout.addWidget(cav_widgets.expert_screen_button)
             cav_button_hlayout.addStretch()
@@ -373,6 +329,7 @@ class Linac:
             cav_vlayout.addLayout(cav_amp_hlayout)
             cav_vlayout.addLayout(cav_button_hlayout)
             cav_vlayout.addWidget(cav_widgets.status_label)
+            cav_vlayout.addWidget(cav_widgets.progress_bar)
             all_cav_layout.addWidget(
                 cav_groupbox, 0 if cav_num in range(1, 5) else 1, (cav_num - 1) % 4
             )
@@ -384,14 +341,11 @@ class SetupGUI(Display):
 
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)
-        self.threadpool = QThreadPool()
-        print(f"Max thread count: {self.threadpool.maxThreadCount()}")
 
-        self.checkThreadTimer = QTimer(self)
-        # I think this is 1 second?
-        self.checkThreadTimer.setInterval(1000)
-        self.checkThreadTimer.timeout.connect(self.update_threadcount)
-        self.checkThreadTimer.start()
+        self.ui.machine_abort_button.setStyleSheet(ERROR_STYLESHEET)
+        self.ui.machine_abort_button.clicked.connect(self.request_stop)
+        self.ui.machine_setup_button.clicked.connect(self.trigger_setup)
+        self.ui.machine_shutdown_button.clicked.connect(self.trigger_shutdown)
 
         self.settings = Settings(
             ssa_cal_checkbox=self.ui.ssa_cal_checkbox,
@@ -399,7 +353,6 @@ class SetupGUI(Display):
             cav_char_checkbox=self.ui.cav_char_checkbox,
             rf_ramp_checkbox=self.ui.rf_ramp_checkbox,
         )
-
         self.linac_widgets: List[Linac] = []
         for linac_idx in range(0, 4):
             self.linac_widgets.append(
@@ -422,7 +375,6 @@ class SetupGUI(Display):
         self.linac_aact_pvs: List[PV] = [
             PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)
         ]
-
         self.update_readback()
 
         linac_tab_widget: QTabWidget = self.ui.tabWidget_linac
@@ -437,7 +389,7 @@ class SetupGUI(Display):
             hlayout.addStretch()
             hlayout.addWidget(QLabel(f"{linac.name} Amplitude:"))
             hlayout.addWidget(linac.readback_label)
-            # hlayout.addWidget(linac.setup_button)
+            hlayout.addWidget(linac.setup_button)
             hlayout.addWidget(linac.abort_button)
             hlayout.addWidget(linac.acon_button)
             hlayout.addStretch()
@@ -452,5 +404,17 @@ class SetupGUI(Display):
             readback += linac_aact_pv.get()
         self.ui.machine_readback_label.setText(f"{readback:.2f} MV")
 
-    def update_threadcount(self):
-        self.ui.threadcount_label.setText(f"{self.threadpool.activeThreadCount()}")
+    def trigger_setup(self):
+        MACHINE.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
+        MACHINE.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
+        MACHINE.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
+        MACHINE.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
+        MACHINE.trigger_setup()
+
+    @staticmethod
+    def trigger_shutdown():
+        MACHINE.trigger_shutdown()
+
+    @staticmethod
+    def request_stop():
+        MACHINE.request_abort()

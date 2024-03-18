@@ -284,6 +284,12 @@ class SetupCavity(Cavity, AutoLinacObject):
             self.status = STATUS_RUNNING_VALUE
             self.progress = 0
 
+            # Not turning it off can cause problems if an interlock is tripped
+            # but the requested RF state is on
+            self.status_message = f"Turning {self} off before starting setup"
+            self.turnOff()
+            self.progress = 5
+
             self.status_message = f"Turning on {self} SSA if not on already"
             self.ssa.turn_on()
             self.progress = 10

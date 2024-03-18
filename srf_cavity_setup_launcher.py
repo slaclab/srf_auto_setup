@@ -2,7 +2,7 @@ import argparse
 
 from lcls_tools.superconducting.sc_linac_utils import ALL_CRYOMODULES
 
-from setup_linac import SETUP_CRYOMODULES, SetupCavity
+from setup_linac import SetupCavity, SETUP_MACHINE
 
 
 def main():
@@ -45,6 +45,6 @@ if __name__ == "__main__":
     cm_name = args.cryomodule
     cav_num = args.cavity
 
-    cavity_object: SetupCavity = SETUP_CRYOMODULES[cm_name].cavities[cav_num]
+    cavity_object: SetupCavity = SETUP_MACHINE.cryomodules[cm_name].cavities[cav_num]
 
     main()

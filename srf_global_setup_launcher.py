@@ -5,7 +5,7 @@ from lcls_tools.superconducting.sc_linac_utils import (
     ALL_CRYOMODULES_NO_HL,
 )
 
-from setup_linac import SETUP_CRYOMODULES, SetupCryomodule, SetupMachine
+from setup_linac import SETUP_MACHINE, SetupCryomodule, SetupMachine
 
 
 def setup_cryomodule(cryomodule_object: SetupCryomodule):
@@ -37,10 +37,10 @@ if __name__ == "__main__":
 
     if args.no_hl:
         for cm_name in ALL_CRYOMODULES_NO_HL:
-            cm_object: SetupCryomodule = SETUP_CRYOMODULES[cm_name]
+            cm_object: SetupCryomodule = SETUP_MACHINE.cryomodules[cm_name]
             setup_cryomodule(cm_object)
 
     else:
         for cm_name in ALL_CRYOMODULES:
-            cm_object: SetupCryomodule = SETUP_CRYOMODULES[cm_name]
+            cm_object: SetupCryomodule = SETUP_MACHINE.cryomodules[cm_name]
             setup_cryomodule(cm_object)

@@ -3,7 +3,7 @@ from time import sleep
 
 from lcls_tools.superconducting.sc_linac_utils import LINAC_CM_DICT
 
-from setup_linac import SETUP_CRYOMODULES, SetupCryomodule
+from setup_linac import SETUP_MACHINE, SetupCryomodule
 
 
 def setup_cryomodule(cryomodule_object: SetupCryomodule):
@@ -43,6 +43,6 @@ if __name__ == "__main__":
     linac_number: int = args.linac
 
     for cm_name in LINAC_CM_DICT[linac_number]:
-        cm_object: SetupCryomodule = SETUP_CRYOMODULES[cm_name]
+        cm_object: SetupCryomodule = SETUP_MACHINE.cryomodules[cm_name]
         setup_cryomodule(cm_object)
         sleep(0.5)

@@ -4,20 +4,13 @@ from typing import Optional
 from epics.ca import CASeverityException
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 from lcls_tools.superconducting import sc_linac_utils
-from lcls_tools.superconducting.scLinac import (
+from lcls_tools.superconducting.sc_linac import (
     Cavity,
-    CryoDict,
     Cryomodule,
     Linac,
-    Magnet,
-    Piezo,
-    Rack,
-    SSA,
-    StepperTuner,
+    Machine,
 )
 from lcls_tools.superconducting.sc_linac_utils import (
-    ALL_CRYOMODULES,
-    LINAC_CM_DICT,
     SCLinacObject,
     RF_MODE_SELA,
 )
@@ -162,13 +155,10 @@ class AutoLinacObject(SCLinacObject):
 class SetupCavity(Cavity, AutoLinacObject):
     def __init__(
         self,
-        cavityNum,
-        rackObject,
-        ssaClass=SSA,
-        stepperClass=StepperTuner,
-        piezoClass=Piezo,
+        cavity_num,
+        rack_object,
     ):
-        Cavity.__init__(self, cavityNum=cavityNum, rackObject=rackObject)
+        Cavity.__init__(self, cavity_num=cavity_num, rack_object=rack_object)
         AutoLinacObject.__init__(self)
 
         self.progress_pv: str = self.auto_pv_addr("PROG")
@@ -256,7 +246,7 @@ class SetupCavity(Cavity, AutoLinacObject):
             self.status = STATUS_RUNNING_VALUE
             self.progress = 0
             self.status_message = f"Turning {self} RF off"
-            self.turnOff()
+            self.turn_off()
             self.progress = 50
             self.status_message = f"Turning {self} SSA off"
             self.ssa.turn_off()
@@ -284,6 +274,8 @@ class SetupCavity(Cavity, AutoLinacObject):
             self.status = STATUS_RUNNING_VALUE
             self.progress = 0
 
+            self.turn_off()
+
             self.status_message = f"Turning on {self} SSA if not on already"
             self.ssa.turn_on()
             self.progress = 10
@@ -294,7 +286,7 @@ class SetupCavity(Cavity, AutoLinacObject):
 
             if self.ssa_cal_requested:
                 self.status_message = f"Running {self} SSA Calibration"
-                self.turnOff()
+                self.turn_off()
                 self.progress = 20
                 self.ssa.calibrate(self.ssa.drive_max)
                 self.status_message = f"{self} SSA Calibrated"
@@ -381,20 +373,11 @@ class SetupCryomodule(Cryomodule, AutoLinacObject):
         self,
         cryo_name,
         linac_object,
-        cavity_class=SetupCavity,
-        magnet_class=Magnet,
-        rack_class=Rack,
-        is_harmonic_linearizer=False,
-        ssa_class=SSA,
-        stepper_class=StepperTuner,
-        piezo_class=Piezo,
     ):
         Cryomodule.__init__(
             self,
             cryo_name=cryo_name,
             linac_object=linac_object,
-            cavity_class=SetupCavity,
-            is_harmonic_linearizer=is_harmonic_linearizer,
         )
         AutoLinacObject.__init__(self)
 
@@ -409,39 +392,43 @@ class SetupLinac(Linac, AutoLinacObject):
         return f"ACCL:{self.name}:1:"
 
     def __init__(
-        self, linac_name, beamline_vacuum_infixes, insulating_vacuum_cryomodules
+        self,
+        linac_section,
+        beamline_vacuum_infixes,
+        insulating_vacuum_cryomodules,
+        machine,
     ):
         Linac.__init__(
             self,
-            linac_name=linac_name,
+            linac_section=linac_section,
             beamline_vacuum_infixes=beamline_vacuum_infixes,
             insulating_vacuum_cryomodules=insulating_vacuum_cryomodules,
+            machine=machine,
         )
         AutoLinacObject.__init__(self)
 
     def clear_abort(self):
-        for cm_name in LINAC_CM_DICT[int(self.name[1])]:
-            cm_obj: SetupCryomodule = SETUP_CRYOMODULES[cm_name]
-            cm_obj.clear_abort()
+        for cm in self.cryomodules.values():
+            cm.clear_abort()
 
 
-class SetupMachine(AutoLinacObject, SCLinacObject):
+class SetupMachine(Machine, AutoLinacObject):
     @property
     def pv_prefix(self):
         return "ACCL:SYS0:SC:"
 
     def __init__(self):
-        SCLinacObject.__init__(self)
+        Machine.__init__(
+            self,
+            cavity_class=SetupCavity,
+            cryomodule_class=SetupCryomodule,
+            linac_class=SetupLinac,
+        )
         AutoLinacObject.__init__(self)
 
     def clear_abort(self):
-        for cm_name in ALL_CRYOMODULES:
-            cm_obj: SetupCryomodule = SETUP_CRYOMODULES[cm_name]
-            cm_obj.clear_abort()
+        for cm in self.cryomodules:
+            cm.clear_abort()
 
 
-MACHINE = SetupMachine()
-
-SETUP_CRYOMODULES: CryoDict = CryoDict(
-    cavityClass=SetupCavity, cryomoduleClass=SetupCryomodule, linacClass=SetupLinac
-)
+SETUP_MACHINE = SetupMachine()

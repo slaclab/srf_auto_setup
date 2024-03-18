@@ -23,13 +23,7 @@ from pydm.widgets import PyDMLabel
 from pydm.widgets.analog_indicator import PyDMAnalogIndicator
 from pydm.widgets.display_format import DisplayFormat
 
-from setup_linac import (
-    SETUP_CRYOMODULES,
-    SetupCavity,
-    SetupCryomodule,
-    SetupLinac,
-    MACHINE,
-)
+from setup_linac import SetupCavity, SetupCryomodule, SetupLinac, SETUP_MACHINE
 
 
 @dataclasses.dataclass
@@ -105,7 +99,9 @@ class GUICavity:
     @property
     def cavity(self) -> SetupCavity:
         if not self._cavity:
-            self._cavity: SetupCavity = SETUP_CRYOMODULES[self.cm].cavities[self.number]
+            self._cavity: SetupCavity = SETUP_MACHINE.cryomodules[self.cm].cavities[
+                self.number
+            ]
         return self._cavity
 
     def trigger_shutdown(self):
@@ -188,7 +184,7 @@ class GUICryomodule:
     @property
     def cryomodule_object(self) -> SetupCryomodule:
         if not self._cryomodule:
-            self._cryomodule: SetupCryomodule = SETUP_CRYOMODULES[self.name]
+            self._cryomodule: SetupCryomodule = SETUP_MACHINE.cryomodules[self.name]
         return self._cryomodule
 
     def trigger_setup(self):
@@ -250,11 +246,7 @@ class Linac:
     @property
     def linac_object(self):
         if not self._linac_object:
-            self._linac_object = SetupLinac(
-                linac_name=self.name,
-                beamline_vacuum_infixes=[],
-                insulating_vacuum_cryomodules=[],
-            )
+            self._linac_object: SetupLinac = SETUP_MACHINE.linacs[self.idx]
         return self._linac_object
 
     def request_stop(self):
@@ -405,16 +397,16 @@ class SetupGUI(Display):
         self.ui.machine_readback_label.setText(f"{readback:.2f} MV")
 
     def trigger_setup(self):
-        MACHINE.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
-        MACHINE.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
-        MACHINE.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
-        MACHINE.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
-        MACHINE.trigger_setup()
+        SETUP_MACHINE.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
+        SETUP_MACHINE.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
+        SETUP_MACHINE.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
+        SETUP_MACHINE.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
+        SETUP_MACHINE.trigger_setup()
 
     @staticmethod
     def trigger_shutdown():
-        MACHINE.trigger_shutdown()
+        SETUP_MACHINE.trigger_shutdown()
 
     @staticmethod
     def request_stop():
-        MACHINE.request_abort()
+        SETUP_MACHINE.request_abort()

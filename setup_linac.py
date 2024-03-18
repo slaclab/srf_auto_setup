@@ -427,7 +427,7 @@ class SetupMachine(Machine, AutoLinacObject):
         AutoLinacObject.__init__(self)
 
     def clear_abort(self):
-        for cm in self.cryomodules:
+        for cm in self.cryomodules.values():
             cm.clear_abort()
 
 

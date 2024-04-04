@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
 from pydm import Display
-from pydm.widgets import PyDMLabel, PyDMRelatedDisplayButton
+from pydm.widgets import PyDMLabel
 from pydm.widgets.analog_indicator import PyDMAnalogIndicator
 from pydm.widgets.display_format import DisplayFormat
 
@@ -105,9 +105,7 @@ class GUICavity:
         
         note_layout.addWidget(note_label)
         self.note_window.setLayout(note_layout)
-        self.note_button: PyDMRelatedDisplayButton = PyDMRelatedDisplayButton(
-                parent=self.parent, init_channel=self.cavity.note_pv
-        )
+        self.note_button: QPushButton = QPushButton(parent=self.parent)
         self.note_button.alarmSensitiveContent = True
         self.note_button.alarmSensitiveBorder = True
         self.note_button.clicked.connect(self.open_note)

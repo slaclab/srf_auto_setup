@@ -2,6 +2,7 @@ from time import sleep
 from typing import Optional
 
 from epics.ca import CASeverityException
+
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 from lcls_tools.superconducting import sc_linac_utils
 from lcls_tools.superconducting.sc_linac import (
@@ -10,10 +11,7 @@ from lcls_tools.superconducting.sc_linac import (
     Linac,
     Machine,
 )
-from lcls_tools.superconducting.sc_linac_utils import (
-    SCLinacObject,
-    RF_MODE_SELA,
-)
+from lcls_tools.superconducting.sc_linac_utils import (RF_MODE_SELA, SCLinacObject)
 
 STATUS_READY_VALUE = 0
 STATUS_RUNNING_VALUE = 1
@@ -169,9 +167,18 @@ class SetupCavity(Cavity, AutoLinacObject):
 
         self.status_msg_pv: str = self.auto_pv_addr("MSG")
         self._status_msg_pv_obj: Optional[PV] = None
+        
+        self.note_pv: str = self.auto_pv_addr("NOTE")
+        self._note_pv_obj: Optional[PV] = None
 
     def capture_acon(self):
         self.acon = self.ades
+        
+    @property
+    def note_pv_obj(self) -> PV:
+        if not self._note_pv_obj:
+            self._note_pv_obj = PV(self.note_pv)
+        return self._note_pv_obj
 
     @property
     def status_pv_obj(self):

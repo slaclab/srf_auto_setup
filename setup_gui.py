@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
 from pydm import Display
-from pydm.widgets import PyDMLabel
+from pydm.widgets import PyDMLabel, PyDMRelatedDisplayButton
 from pydm.widgets.analog_indicator import PyDMAnalogIndicator
 from pydm.widgets.display_format import DisplayFormat
 
@@ -96,7 +96,7 @@ class GUICavity:
         
         self.note_window = Display()
         self.note_window.setWindowTitle(f"{self.cavity} Notes")
-        layout: QVBoxLayout = QVBoxLayout()
+        note_layout: QVBoxLayout = QVBoxLayout()
         
         note_label: PyDMLabel = PyDMLabel(init_channel=self.cavity.note_pv)
         note_label.displayFormat = DisplayFormat.String
@@ -104,10 +104,13 @@ class GUICavity:
         note_label.alarmSensitiveBorder = True
         note_label.alarmSensitiveContent = True
         
-        layout.addWidget(note_label)
-        self.note_window.setLayout(layout)
-        self.note_button: QPushButton = QPushButton(parent=self.parent)
+        note_layout.addWidget(note_label)
+        self.note_window.setLayout(note_layout)
+        self.note_button: PyDMRelatedDisplayButton = PyDMRelatedDisplayButton(parent=self.parent,
+                                                                              init_channel=self.cavity.note_pv)
         self.note_button.clicked.connect(partial(showDisplay, self.note_window))
+        self.note_button.alarmSensitiveContent = True
+        self.note_button.alarmSensitiveBorder = True
 
     def request_stop(self):
         self.cavity.request_abort()

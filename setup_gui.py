@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -85,6 +86,7 @@ class GUICavity:
                 init_channel=self.cavity.progress_pv
         )
         self.progress_bar.backgroundSizeRate = 0.2
+        self.progress_bar.sizePolicy().setVerticalPolicy(QSizePolicy.Maximum)
         
         self.expert_screen_button: PyDMEDMDisplayButton = PyDMEDMDisplayButton()
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]

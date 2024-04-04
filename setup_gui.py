@@ -332,6 +332,7 @@ class Linac:
             cav_button_hlayout.addWidget(cav_widgets.shutdown_button)
             cav_button_hlayout.addWidget(cav_widgets.abort_button)
             cav_button_hlayout.addWidget(cav_widgets.expert_screen_button)
+            cav_button_hlayout.addWidget(cav_widgets.note_button)
             cav_button_hlayout.addStretch()
 
             cav_vlayout.addLayout(cav_amp_hlayout)

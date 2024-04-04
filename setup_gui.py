@@ -1,4 +1,5 @@
 import dataclasses
+from functools import partial
 from typing import Dict, List, Optional
 
 from PyQt5.QtCore import Qt
@@ -15,15 +16,15 @@ from PyQt5.QtWidgets import (
 )
 from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
-from lcls_tools.common.controls.pyepics.utils import PV
-from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
-from lcls_tools.superconducting import sc_linac_utils
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from pydm.widgets.analog_indicator import PyDMAnalogIndicator
 from pydm.widgets.display_format import DisplayFormat
 
-from setup_linac import SetupCavity, SetupCryomodule, SetupLinac, SETUP_MACHINE
+from lcls_tools.common.controls.pyepics.utils import PV
+from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET, showDisplay
+from lcls_tools.superconducting import sc_linac_utils
+from setup_linac import SETUP_MACHINE, SetupCavity, SetupCryomodule, SetupLinac
 
 
 @dataclasses.dataclass
@@ -92,6 +93,21 @@ class GUICavity:
             "," + "SELTAB=0,SELCHAR=3"
         )
         self.expert_screen_button.setToolTip("EDM expert screens")
+        
+        self.note_window = Display()
+        self.note_window.setWindowTitle(f"{self.cavity} Notes")
+        layout: QVBoxLayout = QVBoxLayout()
+        
+        note_label: PyDMLabel = PyDMLabel(init_channel=self.cavity.note_pv)
+        note_label.displayFormat = DisplayFormat.String
+        note_label.setWordWrap(True)
+        note_label.alarmSensitiveBorder = True
+        note_label.alarmSensitiveContent = True
+        
+        layout.addWidget(note_label)
+        self.note_window.setLayout(layout)
+        self.note_button: QPushButton = QPushButton(parent=self.parent)
+        self.note_button.clicked.connect(partial(showDisplay, self.note_window))
 
     def request_stop(self):
         self.cavity.request_abort()

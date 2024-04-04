@@ -21,7 +21,7 @@ from pydm.widgets.analog_indicator import PyDMAnalogIndicator
 from pydm.widgets.display_format import DisplayFormat
 
 from lcls_tools.common.controls.pyepics.utils import PV
-from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET, showDisplay
+from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
 from lcls_tools.superconducting import sc_linac_utils
 from setup_linac import SETUP_MACHINE, SetupCavity, SetupCryomodule, SetupLinac
 
@@ -93,28 +93,14 @@ class GUICavity:
         )
         self.expert_screen_button.setToolTip("EDM expert screens")
         
-        self.note_window = Display()
-        self.note_window.setWindowTitle(f"{self.cavity} Notes")
-        self.note_layout: QVBoxLayout = QVBoxLayout()
-        
         self.note_label: PyDMLabel = PyDMLabel(init_channel=self.cavity.note_pv)
         self.note_label.displayFormat = DisplayFormat.String
         self.note_label.setWordWrap(True)
         self.note_label.alarmSensitiveBorder = True
         self.note_label.alarmSensitiveContent = True
-        
-        self.note_layout.addWidget(self.note_label)
-        self.note_window.setLayout(self.note_layout)
-        self.note_button: QPushButton = QPushButton(parent=self.parent)
-        self.note_button.alarmSensitiveContent = True
-        self.note_button.alarmSensitiveBorder = True
-        self.note_button.clicked.connect(self.open_note)
     
     def request_stop(self):
         self.cavity.request_abort()
-    
-    def open_note(self):
-        showDisplay(self.note_window)
     
     @property
     def cavity(self) -> SetupCavity:
@@ -336,7 +322,6 @@ class Linac:
             cav_button_hlayout.addWidget(cav_widgets.shutdown_button)
             cav_button_hlayout.addWidget(cav_widgets.abort_button)
             cav_button_hlayout.addWidget(cav_widgets.expert_screen_button)
-            # cav_button_hlayout.addWidget(cav_widgets.note_button)
             cav_button_hlayout.addStretch()
             
             cav_vlayout.addLayout(cav_amp_hlayout)

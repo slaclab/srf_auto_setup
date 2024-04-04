@@ -336,13 +336,14 @@ class Linac:
             cav_button_hlayout.addWidget(cav_widgets.shutdown_button)
             cav_button_hlayout.addWidget(cav_widgets.abort_button)
             cav_button_hlayout.addWidget(cav_widgets.expert_screen_button)
-            cav_button_hlayout.addWidget(cav_widgets.note_button)
+            # cav_button_hlayout.addWidget(cav_widgets.note_button)
             cav_button_hlayout.addStretch()
             
             cav_vlayout.addLayout(cav_amp_hlayout)
             cav_vlayout.addLayout(cav_button_hlayout)
             cav_vlayout.addWidget(cav_widgets.status_label)
             cav_vlayout.addWidget(cav_widgets.progress_bar)
+            cav_vlayout.addWidget(cav_widgets.note_label)
             all_cav_layout.addWidget(
                     cav_groupbox, 0 if cav_num in range(1, 5) else 1, (cav_num - 1) % 4
             )

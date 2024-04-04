@@ -1,0 +1,6 @@
+edmbutton @ git+https://github.com/slaclab/edmbutton.git
+lcls-tools @ git+https://github.com/slaclab/lcls-tools.git
+pydm
+typing
+pyepics
+PyQt5

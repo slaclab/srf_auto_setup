@@ -6,6 +6,7 @@ from setup_linac import (
     SetupCavity,
     STATUS_RUNNING_VALUE,
     STATUS_READY_VALUE,
+    STATUS_ERROR_VALUE,
 )
 
 
@@ -56,6 +57,7 @@ class TestSetupCavity(TestCase):
         self.setup_cavity._shutoff_pv_obj = self.mock_shutdown_pv_obj
 
         self.mock_status_pv_obj = mock.Mock(pvname=self.setup_cavity.status_pv)
+        self.mock_status_pv_obj.put = mock.MagicMock(return_value=1)
         self.setup_cavity._status_pv_obj = self.mock_status_pv_obj
 
         self.mock_status_msg_pv_obj = mock.MagicMock(
@@ -178,7 +180,27 @@ class TestSetupCavity(TestCase):
             self.fail(f"{self.setup_cavity} threw exception when abort not requested")
 
     def test_shut_down(self):
+        """
+        TODO figure out how to test abort sequence/if we need it
+        :return:
+        """
+        self.mock_status_pv_obj.get = mock.MagicMock(return_value=STATUS_RUNNING_VALUE)
         self.setup_cavity.shut_down()
+        self.mock_status_msg_pv_obj.put.assert_called_with(
+            f"{self.setup_cavity} script already running"
+        )
+
+        self.mock_status_pv_obj.get = mock.MagicMock(return_value=STATUS_READY_VALUE)
+        self.setup_cavity.turn_off = mock.MagicMock()
+        self.setup_cavity.ssa.turn_off = mock.MagicMock()
+        self.setup_cavity.shut_down()
+
+        self.setup_cavity.turn_off.assert_called()
+        self.setup_cavity.ssa.turn_off.assert_called()
+        self.mock_abort_pv_obj.put.assert_called_with(0)
+        self.mock_status_pv_obj.put.assert_called()
+        self.mock_progress_pv_obj.put.assert_called()
+        self.mock_status_msg_pv_obj.put.assert_called()
 
     def test_setup(self):
         self.setup_cavity.setup()

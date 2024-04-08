@@ -14,6 +14,8 @@ from setup_linac import (
     STATUS_READY_VALUE,
     STATUS_ERROR_VALUE,
     SetupCryomodule,
+    SetupLinac,
+    SetupMachine,
 )
 
 
@@ -378,16 +380,34 @@ class TestSetupCryomodule(TestCase):
 
 
 class TestSetupLinac(TestCase):
+    def setUp(self):
+        self.setup_linac: SetupLinac = SETUP_MACHINE.linacs[2]
+
     def test_pv_prefix(self):
-        self.skipTest("Not yet implemented")
+        self.assertEqual(self.setup_linac.pv_prefix, "ACCL:L2B:1:")
 
     def test_clear_abort(self):
-        self.skipTest("Not yet implemented")
+        for cm in self.setup_linac.cryomodules.values():
+            cm.clear_abort = mock.MagicMock()
+
+        self.setup_linac.clear_abort()
+
+        for cm in self.setup_linac.cryomodules.values():
+            cm.clear_abort.assert_called()
 
 
 class TestSetupMachine(TestCase):
+    def setUp(self):
+        self.setup_machine: SetupMachine = SETUP_MACHINE
+
     def test_pv_prefix(self):
-        self.skipTest("Not yet implemented")
+        self.assertEqual(self.setup_machine.pv_prefix, "ACCL:SYS0:SC:")
 
     def test_clear_abort(self):
-        self.skipTest("Not yet implemented")
+        for cm in self.setup_machine.cryomodules.values():
+            cm.clear_abort = mock.MagicMock()
+
+        self.setup_machine.clear_abort()
+
+        for cm in self.setup_machine.cryomodules.values():
+            cm.clear_abort.assert_called()

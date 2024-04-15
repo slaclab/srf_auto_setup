@@ -11,7 +11,7 @@ from lcls_tools.superconducting.sc_linac import (
     Linac,
     Machine,
 )
-from lcls_tools.superconducting.sc_linac_utils import (RF_MODE_SELA, SCLinacObject)
+from lcls_tools.superconducting.sc_linac_utils import RF_MODE_SELA, SCLinacObject
 
 STATUS_READY_VALUE = 0
 STATUS_RUNNING_VALUE = 1
@@ -167,13 +167,13 @@ class SetupCavity(Cavity, AutoLinacObject):
 
         self.status_msg_pv: str = self.auto_pv_addr("MSG")
         self._status_msg_pv_obj: Optional[PV] = None
-        
+
         self.note_pv: str = self.auto_pv_addr("NOTE")
         self._note_pv_obj: Optional[PV] = None
 
     def capture_acon(self):
         self.acon = self.ades
-        
+
     @property
     def note_pv_obj(self) -> PV:
         if not self._note_pv_obj:
@@ -373,6 +373,7 @@ class SetupCavity(Cavity, AutoLinacObject):
             sc_linac_utils.CavityFaultError,
             sc_linac_utils.CavityAbortError,
             CASeverityException,
+            sc_linac_utils.CavityCharacterizationError,
         ) as e:
             self.status = STATUS_ERROR_VALUE
             self.clear_abort()

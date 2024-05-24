@@ -4,12 +4,6 @@ pydm
 typing
 pyepics
 PyQt5
-pyyaml
-pydantic
-h5py
 numpy
-requests
 scipy
 qtpy
-scikit-learn
-matplotlib

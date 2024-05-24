@@ -33,9 +33,17 @@ class GUICryomodule(SetupCryomodule):
             cavity.capture_acon()
 
     def trigger_setup(self):
-        self.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
-        self.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
-        self.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
-        self.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
+        self.ssa_cal_requested = (
+            self.linac.machine.settings.ssa_cal_checkbox.isChecked()
+        )
+        self.auto_tune_requested = (
+            self.linac.machine.settings.auto_tune_checkbox.isChecked()
+        )
+        self.cav_char_requested = (
+            self.linac.machine.settings.cav_char_checkbox.isChecked()
+        )
+        self.rf_ramp_requested = (
+            self.linac.machine.settings.rf_ramp_checkbox.isChecked()
+        )
 
         super().trigger_setup()

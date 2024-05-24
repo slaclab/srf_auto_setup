@@ -7,7 +7,8 @@ from frontend.gui_machine import GUIMachine
 class SetupGUI(Display):
     def __init__(self, parent=None, args=None):
         super(SetupGUI, self).__init__(parent=parent, args=args)
-        self.gui_machine = GUIMachine(parent=self)
+        self.gui_machine = GUIMachine()
+        self.gui_machine.update_readback()
 
         self.setWindowTitle("SRF Auto Setup")
         self.vlayout: QVBoxLayout = QVBoxLayout()

@@ -7,7 +7,6 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
 )
 from epics import camonitor
-from pydm import Display
 
 from backend.utils import AutoLinacObject
 from frontend.gui_cavity import GUICavity
@@ -23,7 +22,7 @@ class GUIMachine(Machine, AutoLinacObject):
     def pv_prefix(self):
         return "ACCL:SYS0:SC:AUTO:"
 
-    def __init__(self, parent: Display):
+    def __init__(self):
         Machine.__init__(
             self,
             linac_class=GUILinac,
@@ -31,8 +30,6 @@ class GUIMachine(Machine, AutoLinacObject):
             cavity_class=GUICavity,
         )
         AutoLinacObject.__init__(self)
-
-        self.parent: Display = parent
 
         self.machine_abort_button = QPushButton("Abort Machine")
         self.machine_setup_button = QPushButton("Set Up Machine")
@@ -56,8 +53,6 @@ class GUIMachine(Machine, AutoLinacObject):
         )
 
         self.machine_readback_label: QLabel = QLabel()
-
-        self.update_readback()
 
         self.linac_tab_widget: QTabWidget = QTabWidget()
 

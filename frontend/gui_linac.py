@@ -62,7 +62,7 @@ class GUILinac(SetupLinac):
         self.cm_tab_widget: QTabWidget = QTabWidget()
 
         for cm_name in self.cryomodules.keys():
-            self.add_cm_tab(cm_name)
+            self._add_cm_tab(cm_name)
 
     @property
     def aact(self):
@@ -81,7 +81,7 @@ class GUILinac(SetupLinac):
         for gui_cm in self.cryomodules.values():
             gui_cm.capture_acon()
 
-    def add_cm_tab(self, cm_name: str):
+    def _add_cm_tab(self, cm_name: str):
         page: QWidget = QWidget()
         vlayout: QVBoxLayout = QVBoxLayout()
         page.setLayout(vlayout)

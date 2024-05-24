@@ -3,151 +3,16 @@ from typing import Optional
 
 from epics.ca import CASeverityException
 
+from backend.utils import (
+    STATUS_READY_VALUE,
+    STATUS_RUNNING_VALUE,
+    STATUS_ERROR_VALUE,
+    AutoLinacObject,
+)
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 from lcls_tools.superconducting import sc_linac_utils
-from lcls_tools.superconducting.sc_linac import (
-    Cavity,
-    Cryomodule,
-    Linac,
-    Machine,
-)
-from lcls_tools.superconducting.sc_linac_utils import (RF_MODE_SELA, SCLinacObject)
-
-STATUS_READY_VALUE = 0
-STATUS_RUNNING_VALUE = 1
-STATUS_ERROR_VALUE = 2
-
-
-class AutoLinacObject(SCLinacObject):
-    def auto_pv_addr(self, suffix: str):
-        return self.pv_addr("AUTO:" + suffix)
-
-    def __init__(self):
-        self.abort_pv: str = self.auto_pv_addr("ABORT")
-        self._abort_pv_obj: Optional[PV] = None
-
-        self.off_stop_pv: str = self.auto_pv_addr("OFFSTOP")
-        self._off_stop_pv_obj: Optional[PV] = None
-
-        self.shutoff_pv: str = self.auto_pv_addr("OFFSTRT")
-        self._shutoff_pv_obj: Optional[PV] = None
-
-        self.start_pv: str = self.auto_pv_addr("SETUPSTRT")
-        self._start_pv_obj: Optional[PV] = None
-
-        self.stop_pv: str = self.auto_pv_addr("SETUPSTOP")
-        self._stop_pv_obj: Optional[PV] = None
-
-        self.ssa_cal_requested_pv: str = self.auto_pv_addr("SETUP_SSAREQ")
-        self._ssa_cal_requested_pv_obj: Optional[PV] = None
-
-        self.auto_tune_requested_pv: str = self.auto_pv_addr("SETUP_TUNEREQ")
-        self._auto_tune_requested_pv_obj: Optional[PV] = None
-
-        self.cav_char_requested_pv: str = self.auto_pv_addr("SETUP_CHARREQ")
-        self._cav_char_requested_pv_obj: Optional[PV] = None
-
-        self.rf_ramp_requested_pv: str = self.auto_pv_addr("SETUP_RAMPREQ")
-        self._rf_ramp_requested_pv_obj: Optional[PV] = None
-
-    @property
-    def start_pv_obj(self) -> PV:
-        if not self._start_pv_obj:
-            self._start_pv_obj = PV(self.start_pv)
-        return self._start_pv_obj
-
-    @property
-    def stop_pv_obj(self) -> PV:
-        if not self._stop_pv_obj:
-            self._stop_pv_obj = PV(self.stop_pv)
-        return self._stop_pv_obj
-
-    @property
-    def shutoff_pv_obj(self) -> PV:
-        if not self._shutoff_pv_obj:
-            self._shutoff_pv_obj = PV(self.shutoff_pv)
-        return self._shutoff_pv_obj
-
-    @property
-    def abort_pv_obj(self):
-        if not self._abort_pv_obj:
-            self._abort_pv_obj = PV(self.abort_pv)
-        return self._abort_pv_obj
-
-    @property
-    def abort_requested(self):
-        return bool(self.abort_pv_obj.get())
-
-    def clear_abort(self):
-        raise NotImplementedError
-
-    def trigger_setup(self):
-        self.start_pv_obj.put(1)
-
-    def trigger_shutdown(self):
-        self.shutoff_pv_obj.put(1)
-
-    def request_abort(self):
-        self.abort_pv_obj.put(1)
-
-    def kill_setup(self):
-        self.stop_pv_obj.put(1)
-
-    @property
-    def ssa_cal_requested_pv_obj(self):
-        if not self._ssa_cal_requested_pv_obj:
-            self._ssa_cal_requested_pv_obj = PV(self.ssa_cal_requested_pv)
-        return self._ssa_cal_requested_pv_obj
-
-    @property
-    def ssa_cal_requested(self):
-        return bool(self.ssa_cal_requested_pv_obj.get())
-
-    @ssa_cal_requested.setter
-    def ssa_cal_requested(self, value: bool):
-        self.ssa_cal_requested_pv_obj.put(value)
-
-    @property
-    def auto_tune_requested_pv_obj(self):
-        if not self._auto_tune_requested_pv_obj:
-            self._auto_tune_requested_pv_obj = PV(self.auto_tune_requested_pv)
-        return self._auto_tune_requested_pv_obj
-
-    @property
-    def auto_tune_requested(self):
-        return bool(self.auto_tune_requested_pv_obj.get())
-
-    @auto_tune_requested.setter
-    def auto_tune_requested(self, value: bool):
-        self.auto_tune_requested_pv_obj.put(value)
-
-    @property
-    def cav_char_requested_pv_obj(self):
-        if not self._cav_char_requested_pv_obj:
-            self._cav_char_requested_pv_obj = PV(self.cav_char_requested_pv)
-        return self._cav_char_requested_pv_obj
-
-    @property
-    def cav_char_requested(self):
-        return bool(self.cav_char_requested_pv_obj.get())
-
-    @cav_char_requested.setter
-    def cav_char_requested(self, value: bool):
-        self.cav_char_requested_pv_obj.put(value)
-
-    @property
-    def rf_ramp_requested_pv_obj(self):
-        if not self._rf_ramp_requested_pv_obj:
-            self._rf_ramp_requested_pv_obj = PV(self.rf_ramp_requested_pv)
-        return self._rf_ramp_requested_pv_obj
-
-    @property
-    def rf_ramp_requested(self):
-        return bool(self.rf_ramp_requested_pv_obj.get())
-
-    @rf_ramp_requested.setter
-    def rf_ramp_requested(self, value: bool):
-        self.rf_ramp_requested_pv_obj.put(value)
+from lcls_tools.superconducting.sc_linac import Cavity
+from lcls_tools.superconducting.sc_linac_utils import RF_MODE_SELA
 
 
 class SetupCavity(Cavity, AutoLinacObject):
@@ -167,13 +32,13 @@ class SetupCavity(Cavity, AutoLinacObject):
 
         self.status_msg_pv: str = self.auto_pv_addr("MSG")
         self._status_msg_pv_obj: Optional[PV] = None
-        
+
         self.note_pv: str = self.auto_pv_addr("NOTE")
         self._note_pv_obj: Optional[PV] = None
 
     def capture_acon(self):
         self.acon = self.ades
-        
+
     @property
     def note_pv_obj(self) -> PV:
         if not self._note_pv_obj:
@@ -377,69 +242,3 @@ class SetupCavity(Cavity, AutoLinacObject):
             self.status = STATUS_ERROR_VALUE
             self.clear_abort()
             self.status_message = str(e)
-
-
-class SetupCryomodule(Cryomodule, AutoLinacObject):
-    def __init__(
-        self,
-        cryo_name,
-        linac_object,
-    ):
-        Cryomodule.__init__(
-            self,
-            cryo_name=cryo_name,
-            linac_object=linac_object,
-        )
-        AutoLinacObject.__init__(self)
-
-    def clear_abort(self):
-        for cavity in self.cavities.values():
-            cavity.clear_abort()
-
-
-class SetupLinac(Linac, AutoLinacObject):
-    @property
-    def pv_prefix(self):
-        return f"ACCL:{self.name}:1:"
-
-    def __init__(
-        self,
-        linac_section,
-        beamline_vacuum_infixes,
-        insulating_vacuum_cryomodules,
-        machine,
-    ):
-        Linac.__init__(
-            self,
-            linac_section=linac_section,
-            beamline_vacuum_infixes=beamline_vacuum_infixes,
-            insulating_vacuum_cryomodules=insulating_vacuum_cryomodules,
-            machine=machine,
-        )
-        AutoLinacObject.__init__(self)
-
-    def clear_abort(self):
-        for cm in self.cryomodules.values():
-            cm.clear_abort()
-
-
-class SetupMachine(Machine, AutoLinacObject):
-    @property
-    def pv_prefix(self):
-        return "ACCL:SYS0:SC:"
-
-    def __init__(self):
-        Machine.__init__(
-            self,
-            cavity_class=SetupCavity,
-            cryomodule_class=SetupCryomodule,
-            linac_class=SetupLinac,
-        )
-        AutoLinacObject.__init__(self)
-
-    def clear_abort(self):
-        for cm in self.cryomodules.values():
-            cm.clear_abort()
-
-
-SETUP_MACHINE = SetupMachine()

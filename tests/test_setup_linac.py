@@ -1,21 +1,18 @@
 from unittest import TestCase, mock
 
+from backend.setup_cavity import SetupCavity
+from backend.setup_cryomodule import SetupCryomodule
+from backend.setup_linac import (
+    SetupMachine,
+    SetupLinac,
+)
+from backend.utils import STATUS_READY_VALUE, STATUS_RUNNING_VALUE, STATUS_ERROR_VALUE
 from lcls_tools.superconducting.sc_linac import MACHINE
 from lcls_tools.superconducting.sc_linac_utils import (
     CavityAbortError,
     HW_MODE_MAINTENANCE_VALUE,
     HW_MODE_ONLINE_VALUE,
     RF_MODE_SELA,
-)
-from setup_linac import (
-    SETUP_MACHINE,
-    SetupCavity,
-    STATUS_RUNNING_VALUE,
-    STATUS_READY_VALUE,
-    STATUS_ERROR_VALUE,
-    SetupCryomodule,
-    SetupLinac,
-    SetupMachine,
 )
 
 
@@ -29,7 +26,10 @@ def mock_pv_obj(pvname, get_val=None) -> mock.MagicMock:
 class TestSetupCavity(TestCase):
     def setUp(self):
         self.base_cavity = MACHINE.cryomodules["01"].cavities[1]
-        self.setup_cavity: SetupCavity = SETUP_MACHINE.cryomodules["01"].cavities[1]
+        self.setup_machine: SetupMachine = SetupMachine()
+        self.setup_cavity: SetupCavity = self.setup_machine.cryomodules["01"].cavities[
+            1
+        ]
 
         self.setup_cavity.ssa.turn_on = mock.MagicMock()
         self.setup_cavity.reset_interlocks = mock.MagicMock()
@@ -367,7 +367,8 @@ class TestSetupCavity(TestCase):
 
 class TestSetupCryomodule(TestCase):
     def setUp(self):
-        self.setup_cm: SetupCryomodule = SETUP_MACHINE.cryomodules["02"]
+        self.setup_machine = SetupMachine()
+        self.setup_cm: SetupCryomodule = self.setup_machine.cryomodules["02"]
 
     def test_clear_abort(self):
         for setup_cavity in self.setup_cm.cavities.values():
@@ -381,7 +382,8 @@ class TestSetupCryomodule(TestCase):
 
 class TestSetupLinac(TestCase):
     def setUp(self):
-        self.setup_linac: SetupLinac = SETUP_MACHINE.linacs[2]
+        self.setup_machine = SetupMachine()
+        self.setup_linac: SetupLinac = self.setup_machine.linacs[2]
 
     def test_pv_prefix(self):
         self.assertEqual(self.setup_linac.pv_prefix, "ACCL:L2B:1:")
@@ -398,7 +400,7 @@ class TestSetupLinac(TestCase):
 
 class TestSetupMachine(TestCase):
     def setUp(self):
-        self.setup_machine: SetupMachine = SETUP_MACHINE
+        self.setup_machine: SetupMachine = SetupMachine()
 
     def test_pv_prefix(self):
         self.assertEqual(self.setup_machine.pv_prefix, "ACCL:SYS0:SC:")

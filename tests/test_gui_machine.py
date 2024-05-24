@@ -4,20 +4,28 @@ from unittest import mock, TestCase
 
 from PyQt5.QtWidgets import QApplication
 
-from tests.utils import mock_func, make_mock_pv, test_setup
+from tests.utils import mock_func, make_mock_pv, test_setup, MockPyDMWidget
 
+# TODO figure out a cleaner way to do this
 with mock.patch("epics.camonitor", mock_func):
-    with mock.patch("pydm.PyDMChannel", mock.MagicMock()):
-        from frontend.gui_machine import GUIMachine
+    with mock.patch("pydm.widgets.PyDMLabel", MockPyDMWidget):
+        with mock.patch(
+            "pydm.widgets.analog_indicator.PyDMAnalogIndicator", MockPyDMWidget
+        ):
+            with mock.patch("pydm.widgets.base.widget_destroyed", mock_func):
+                from frontend.gui_machine import GUIMachine
+
+
+app = QApplication(sys.argv)
 
 
 class TestGUI(TestCase):
+
     def setUp(self) -> None:
-        self.app = QApplication(sys.argv)
         self.gui_machine = GUIMachine()
 
     def tearDown(self) -> None:
-        self.app.closeAllWindows()
+        app.closeAllWindows()
 
 
 class TestGUIMachine(TestGUI):

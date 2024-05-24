@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+from PyQt5.QtWidgets import QWidget
+
 from lcls_tools.common.controls.pyepics.utils import EPICS_NO_ALARM_VAL
 
 
@@ -7,6 +9,17 @@ def mock_func(*args, **kwargs):
     args_str = ",".join(map(str, args))
     kwargs_str = ",".join(f"{k}={v}" for k, v in kwargs.items())
     print(f"mocking  with {','.join([args_str, kwargs_str])}")
+
+
+class MockPyDMWidget(QWidget):
+    def __init__(self, **kwargs):
+        super().__init__(parent=None)
+
+    def setAlignment(self, *args):
+        pass
+
+    def setWordWrap(self, *args):
+        pass
 
 
 def make_mock_pv(

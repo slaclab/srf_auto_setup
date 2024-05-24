@@ -4,7 +4,6 @@ pydm
 typing
 pyepics
 PyQt5
-yaml
 pyyaml
 pydantic
 h5py

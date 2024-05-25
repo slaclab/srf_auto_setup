@@ -4,3 +4,6 @@ pydm
 typing
 pyepics
 PyQt5
+numpy
+scipy
+qtpy

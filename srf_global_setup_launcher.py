@@ -5,7 +5,8 @@ from lcls_tools.superconducting.sc_linac_utils import (
     ALL_CRYOMODULES_NO_HL,
 )
 
-from setup_linac import SETUP_MACHINE, SetupCryomodule, SetupMachine
+from backend.setup_linac import SETUP_MACHINE, SetupMachine
+from backend.setup_cryomodule import SetupCryomodule
 
 
 def setup_cryomodule(cryomodule_object: SetupCryomodule):

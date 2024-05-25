@@ -3,7 +3,9 @@ from time import sleep
 
 from lcls_tools.superconducting.sc_linac_utils import ALL_CRYOMODULES
 
-from setup_linac import SETUP_MACHINE, SetupCryomodule, SetupCavity
+from backend.setup_linac import SETUP_MACHINE
+from backend.setup_cavity import SetupCavity
+from backend.setup_cryomodule import SetupCryomodule
 
 
 def setup_cavity(cavity_object: SetupCavity):

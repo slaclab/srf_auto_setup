@@ -1,19 +1,14 @@
 import sys
 from random import randint
-from unittest import mock, TestCase
+from unittest import TestCase, mock
 
 from PyQt5.QtWidgets import QApplication
 
-from tests.utils import mock_func, make_mock_pv, test_setup, MockPyDMWidget
+from tests.utils import make_mock_pv, test_setup, mock_func
 
-# TODO figure out a cleaner way to do this
+# # TODO figure out a cleaner way to do this
 with mock.patch("epics.camonitor", mock_func):
-    with mock.patch("pydm.widgets.PyDMLabel", MockPyDMWidget):
-        with mock.patch(
-            "pydm.widgets.analog_indicator.PyDMAnalogIndicator", MockPyDMWidget
-        ):
-            with mock.patch("pydm.widgets.base.widget_destroyed", mock_func):
-                from frontend.gui_machine import GUIMachine
+    from frontend.gui_machine import GUIMachine
 
 
 app = QApplication(sys.argv)
